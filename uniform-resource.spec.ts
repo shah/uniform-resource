@@ -18,16 +18,16 @@ export class TestSuite {
             originURN: `test:${base64EncodedHtmlFileName}`,
             htmlSource: Buffer.from(base64Content.toString(), 'base64').toString(),
             filter: ur.chainedFilter(new ur.BrowserTraversibleFilter(captureFilter)),
-            transformer: ur.chainedTransformer(ur.LabelCleaner.singleton)
+            transformer: ur.chainedTransformer(ur.RemoveLabelLineBreaksAndTrimSpaces.singleton)
         });
 
         const retained: ur.UniformResource[] = [];
         emrs.forEachResource((resource: ur.UniformResource): void => {
             retained.push(resource);
             if (ur.isTransformedResource(resource)) {
-                console.log(resource.uri, resource.label, resource.original.uri, resource.original.label);
+                // console.log(resource.uri, resource.label, resource.original.uri, resource.original.label);
             } else {
-                console.log(resource.uri, resource.label);
+                // console.log(resource.uri, resource.label);
             }
         });
         Expect(filtered.length).toBe(3);

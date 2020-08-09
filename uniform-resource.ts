@@ -86,8 +86,25 @@ export class BrowserTraversibleFilter implements UniformResourceFilter {
     }
 }
 
-export class LabelCleaner implements UniformResourceTransformer {
-    static singleton = new LabelCleaner();
+export class RemoveLabelLineBreaksAndTrimSpaces implements UniformResourceTransformer {
+    static singleton = new RemoveLabelLineBreaksAndTrimSpaces();
+
+    transform(resource: UniformResource): TransformedResource {
+        return {
+            isTransformedResource: true,
+            ...resource,
+            chainIndex: transformationChainIndex(resource),
+            original: resource,
+            label: resource.label
+                ? resource.label.replace(/\r\n|\n|\r/gm, " ").trim()
+                : undefined,
+            remarks: "Removed line breaks and trimmed spaces"
+        }
+    }
+}
+
+export class FollowLinksAndRemoveTracking implements UniformResourceTransformer {
+    static singleton = new FollowLinksAndRemoveTracking();
 
     transform(resource: UniformResource): TransformedResource {
         return {

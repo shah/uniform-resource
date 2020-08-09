@@ -26,7 +26,8 @@
     "author": "Shahid N. Shah",
     "license": "MIT",
     "dependencies": {
-        "cheerio": "^1.0.0-rc.3"
+        "cheerio": "^1.0.0-rc.3",
+        "node-fetch": "^2.6.0"
     },
     "bugs": {
         "url": "https://github.com/shah/uniform-resource/issues"
@@ -35,6 +36,7 @@
     "devDependencies": {
         "@types/cheerio": "^0.22.21",
         "@types/node": "^14.0.26",
+        "@types/node-fetch": "^2.5.7",
         "alsatian": "^3.2.1",
         "ts-node": "^8.10.2",
         "typescript": "^3.9.7"
