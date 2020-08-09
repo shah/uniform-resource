@@ -1,0 +1,13 @@
+# Passwords, tokens, etc.
+.secrets/
+
+# Transpiled JavaScript (from TypeScript, tsconfig.json)
+dist/
+
+# Temporary files
+tmp/
+temp/
+
+# Dependency directory
+# https://www.npmjs.org/doc/misc/npm-faq.html#should-i-check-my-node_modules-folder-into-git
+node_modules

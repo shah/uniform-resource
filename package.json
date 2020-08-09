@@ -1,0 +1,42 @@
+{
+    "name": "@shah/uniform-resource",
+    "version": "0.1.0",
+    "description": "Uniform resource suppliers and consumers for content orchestration engines",
+    "main": "dist/uniform-resource.js",
+    "types": "dist/uniform-resource.d.ts",
+    "files": [
+        "dist"
+    ],
+    "scripts": {
+        "prepublishOnly": "tsc --project tsconfig.json",
+        "build": "tsc --project tsconfig.json",
+        "test": "alsatian './**/*.spec.ts'"
+    },
+    "repository": {
+        "url": "git://github.com/shah/uniform-resource.git"
+    },
+    "publishConfig": {
+        "registry": "https://npm.pkg.github.com/"
+    },
+    "keywords": [
+        "url",
+        "uri",
+        "urn"
+    ],
+    "author": "Shahid N. Shah",
+    "license": "MIT",
+    "dependencies": {
+        "cheerio": "^1.0.0-rc.3"
+    },
+    "bugs": {
+        "url": "https://github.com/shah/uniform-resource/issues"
+    },
+    "homepage": "https://github.com/shah/uniform-resource",
+    "devDependencies": {
+        "@types/cheerio": "^0.22.21",
+        "@types/node": "^14.0.26",
+        "alsatian": "^3.2.1",
+        "ts-node": "^8.10.2",
+        "typescript": "^3.9.7"
+    }
+}
