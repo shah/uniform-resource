@@ -14,7 +14,7 @@ export class RemoveLabelLineBreaksAndTrimSpaces implements ur.UniformResourceTra
             return {
                 isTransformedResource: true,
                 ...resource,
-                pipePosition: ur.transformationPipePosition(resource),
+                pipePosition: ur.nextTransformationPipePosition(resource),
                 transformedFromUR: resource,
                 label: cleanLabel,
                 remarks: "Removed line breaks and trimmed spaces"
@@ -33,7 +33,7 @@ export class RemoveTrackingCodesFromUrl implements ur.UniformResourceTransformer
             const transformed: ur.TransformedResource = {
                 isTransformedResource: true,
                 ...resource,
-                pipePosition: ur.transformationPipePosition(resource),
+                pipePosition: ur.nextTransformationPipePosition(resource),
                 transformedFromUR: resource,
                 remarks: "Removed utm_* tracking parameters",
             }
@@ -60,12 +60,12 @@ export class FollowRedirectsGranular implements ur.UniformResourceTransformer {
             result = {
                 isTransformedResource: true,
                 ...resource,
-                pipePosition: ur.transformationPipePosition(resource),
+                pipePosition: ur.nextTransformationPipePosition(resource),
                 transformedFromUR: resource,
                 remarks: "Followed, with " + visitResults.length + " results",
                 isFollowedResource: true,
                 followResults: visitResults,
-                uri: last.url
+                uri: last.urlVisited
             };
         }
         return result;

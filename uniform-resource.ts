@@ -44,7 +44,7 @@ export function isTransformedResource(o: any): o is TransformedResource {
     return o && "isTransformedResource" in o;
 }
 
-export function transformationPipePosition(o: any): number {
+export function nextTransformationPipePosition(o: any): number {
     return isTransformedResource(o) ? o.pipePosition + 1 : 0;
 }
 

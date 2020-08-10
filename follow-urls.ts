@@ -1,23 +1,70 @@
-import fetch from "node-fetch";
+import * as nf from "node-fetch";
 
 // Built from https://github.com/jksolbakken/linkfollower/blob/master/linkfollower.js
 
 const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/42.0.2311.135 Safari/537.36 Edge/12.246'
 const metaRefreshPattern = '(CONTENT|content)=["\']0;[ ]*(URL|url)=(.*?)(["\']\s*>)';
 
-const MAX_REDIRECT_DEPTH = 10;
-
 export interface VisitResult {
-    readonly url: string;
-    readonly redirect: boolean;
-    readonly redirectUrl?: string | null;
-    readonly status: string | number;
-    readonly content?: string;
+    readonly urlVisited: string;
 }
 
-async function visit(originalURL: string): Promise<VisitResult> {
+export interface VisitError extends VisitResult {
+    readonly error: Error;
+}
+
+export interface VisitSuccess extends VisitResult {
+    readonly httpStatus: number;
+    readonly responseHeaders: nf.Headers;
+}
+
+export interface RedirectResult extends VisitSuccess {
+    readonly redirectUrl: string;
+}
+
+export function isRedirectResult(o: any): o is RedirectResult {
+    return o && "redirectUrl" in o;
+}
+
+export interface HttpRedirectResult extends RedirectResult {
+    readonly httpRedirect: boolean;
+}
+
+export function isHttpRedirectResult(o: any): o is HttpRedirectResult {
+    return o && "httpRedirect" in o;
+}
+
+export interface ContentRedirectResult extends VisitSuccess {
+    readonly metaRefreshRedirect: boolean;
+    readonly content: string;
+}
+
+export function isContentRedirectResult(o: any): o is ContentRedirectResult {
+    return o && "metaRefreshRedirect" in o;
+}
+
+export interface TerminalResult extends VisitSuccess {
+    readonly terminalResult: boolean;
+}
+
+export function isTerminalResult(o: any): o is TerminalResult {
+    return o && "terminalResult" in o;
+}
+
+export interface TerminalContentResult extends TerminalResult {
+    readonly terminalContentResult: boolean;
+    readonly content: string;
+}
+
+export function isTerminalContentResult(o: any): o is TerminalContentResult {
+    return o && "terminalContentResult" in o;
+}
+
+export type ConstrainedVisitResult = VisitError | HttpRedirectResult | ContentRedirectResult | TerminalResult | TerminalContentResult;
+
+async function visit(originalURL: string): Promise<ConstrainedVisitResult> {
     const url = prefixWithHttp(originalURL)
-    const response = await fetch(url, {
+    const response = await nf.default(url, {
         redirect: 'manual',
         follow: 0,
         headers: {
@@ -29,38 +76,45 @@ async function visit(originalURL: string): Promise<VisitResult> {
     if (isRedirect(response.status)) {
         const location = response.headers.get('location');
         if (!location) {
-            throw `${url} responded with status ${response.status} but no location header`;
+            return {
+                urlVisited: url,
+                error: new Error(`${url} responded with status ${response.status} but no location header`)
+            }
         }
-        return { url: url, redirect: true, status: response.status, redirectUrl: response.headers.get('location') }
+        return { urlVisited: url, httpRedirect: true, httpStatus: response.status, redirectUrl: location, responseHeaders: response.headers };
     } else if (response.status == 200) {
         const text = await response.text();
         const redirectUrl = extractMetaRefreshUrl(text);
         return redirectUrl ?
-            { url: url, redirect: true, status: '200 + META REFRESH', redirectUrl: redirectUrl } :
-            { url: url, redirect: false, status: response.status, content: text }
+            { urlVisited: url, metaRefreshRedirect: true, httpStatus: response.status, redirectUrl: redirectUrl, content: text, responseHeaders: response.headers } :
+            { urlVisited: url, httpStatus: response.status, terminalResult: true, terminalContentResult: true, content: text, responseHeaders: response.headers }
     } else {
-        return { url: url, redirect: false, status: response.status }
+        return { urlVisited: url, httpStatus: response.status, responseHeaders: response.headers, terminalResult: true }
     }
 }
 
-export async function follow(originalURL: string): Promise<VisitResult[]> {
+export async function follow(originalURL: string, maxDepth: number = 10): Promise<VisitResult[]> {
     const visits: VisitResult[] = [];
     let url: string | undefined | null = originalURL;
     let count = 1;
     let keepGoing = true;
     while (keepGoing) {
-        if (count > MAX_REDIRECT_DEPTH) {
-            throw `Exceeded max redirect depth of ${MAX_REDIRECT_DEPTH}`
+        if (count > maxDepth) {
+            throw `Exceeded max redirect depth of ${maxDepth}`
         }
         try {
-            const response: VisitResult = await visit(url!)
+            const visitResult: ConstrainedVisitResult = await visit(url!);
             count++;
-            visits.push(response);
-            keepGoing = response.redirect;
-            url = response.redirectUrl;
+            visits.push(visitResult);
+            if (isRedirectResult(visitResult)) {
+                keepGoing = true;
+                url = visitResult.redirectUrl;
+            } else {
+                keepGoing = false;
+            }
         } catch (err) {
             keepGoing = false;
-            visits.push({ url: url!, redirect: false, status: `Error: ${err}` });
+            visits.push({ urlVisited: url!, error: err } as VisitError);
         }
     }
     return visits;
