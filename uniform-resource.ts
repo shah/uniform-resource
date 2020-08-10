@@ -112,9 +112,7 @@ export class RemoveLabelLineBreaksAndTrimSpaces implements UniformResourceTransf
                 ...resource,
                 chainIndex: transformationChainIndex(resource),
                 original: resource,
-                label: resource.label
-                    ? resource.label.replace(/\r\n|\n|\r/gm, " ").trim()
-                    : undefined,
+                label: cleanLabel,
                 remarks: "Removed line breaks and trimmed spaces"
             }
         }
