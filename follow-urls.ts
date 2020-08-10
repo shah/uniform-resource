@@ -12,6 +12,7 @@ export interface VisitResult {
     readonly redirect: boolean;
     readonly redirectUrl?: string | null;
     readonly status: string | number;
+    readonly content?: string;
 }
 
 async function visit(originalURL: string): Promise<VisitResult> {
@@ -32,11 +33,11 @@ async function visit(originalURL: string): Promise<VisitResult> {
         }
         return { url: url, redirect: true, status: response.status, redirectUrl: response.headers.get('location') }
     } else if (response.status == 200) {
-        const text = await response.text()
-        const redirectUrl = extractMetaRefreshUrl(text)
+        const text = await response.text();
+        const redirectUrl = extractMetaRefreshUrl(text);
         return redirectUrl ?
             { url: url, redirect: true, status: '200 + META REFRESH', redirectUrl: redirectUrl } :
-            { url: url, redirect: false, status: response.status }
+            { url: url, redirect: false, status: response.status, content: text }
     } else {
         return { url: url, redirect: false, status: response.status }
     }

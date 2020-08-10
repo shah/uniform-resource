@@ -13,6 +13,10 @@ export interface QueryableHtmlContent extends QueryableContent {
     anchors(retain?: AnchorFilter): HtmlAnchor[];
 }
 
+export function isQueryableHtmlContent(o: any): o is QueryableHtmlContent {
+    return o && "isQueryableHtmlContent" in o;
+}
+
 export interface HtmlAnchor {
     readonly href: string;
     readonly label?: string;

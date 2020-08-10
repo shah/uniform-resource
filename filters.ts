@@ -1,6 +1,6 @@
 import * as ur from "./uniform-resource";
 
-export function chainedFilter(...chain: ur.UniformResourceFilter[]): ur.UniformResourceFilter {
+export function filterPipe(...chain: ur.UniformResourceFilter[]): ur.UniformResourceFilter {
     return new class implements ur.UniformResourceFilter {
         retainOriginal(resource: ur.UniformResource): boolean {
             for (const c of chain) {

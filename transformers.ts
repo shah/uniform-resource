@@ -1,5 +1,5 @@
-import * as ur from "./uniform-resource";
 import { follow, VisitResult } from "./follow-urls";
+import * as ur from "./uniform-resource";
 
 export class RemoveLabelLineBreaksAndTrimSpaces implements ur.UniformResourceTransformer {
     static readonly singleton = new RemoveLabelLineBreaksAndTrimSpaces();
@@ -72,30 +72,7 @@ export class FollowRedirectsGranular implements ur.UniformResourceTransformer {
     }
 }
 
-export class FollowRedirectsCheerio implements ur.UniformResourceTransformer {
-    static readonly singleton = new FollowRedirectsCheerio();
-
-    async transform(ctx: ur.UniformResourceContext, resource: ur.UniformResource): Promise<ur.UniformResource | FollowedResource> {
-        let result: ur.UniformResource | FollowedResource = resource;
-        const visitResults = await follow(resource.uri);
-        if (visitResults.length > 1) {
-            const last = visitResults[visitResults.length - 1];
-            result = {
-                isTransformedResource: true,
-                ...resource,
-                pipePosition: ur.transformationPipePosition(resource),
-                transformedFromUR: resource,
-                remarks: "Followed, with " + visitResults.length + " results",
-                isFollowedResource: true,
-                followResults: visitResults,
-                uri: last.url
-            };
-        }
-        return result;
-    }
-}
-
-export function chainedTransformer(...chain: ur.UniformResourceTransformer[]): ur.UniformResourceTransformer {
+export function transformationPipe(...chain: ur.UniformResourceTransformer[]): ur.UniformResourceTransformer {
     if (chain.length == 0) {
         return new class implements ur.UniformResourceTransformer {
             async transform(ctx: ur.UniformResourceContext, resource: ur.UniformResource): Promise<ur.UniformResource> {
