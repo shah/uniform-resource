@@ -65,7 +65,7 @@ export class FollowRedirectsGranular implements ur.UniformResourceTransformer {
                 remarks: "Followed, with " + visitResults.length + " results",
                 isFollowedResource: true,
                 followResults: visitResults,
-                uri: last.urlVisited
+                uri: last.url
             };
         }
         return result;

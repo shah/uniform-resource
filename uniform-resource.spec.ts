@@ -34,9 +34,9 @@ export class TestSuite {
         await emrs.forEachResource(ctx, (resource: ur.UniformResource): void => {
             retained.push(resource);
             if (ur.isTransformedResource(resource)) {
-                console.log(`[${resource.label}] ${ur.allTransformationRemarks(resource).join(" | ")} (${resource.pipePosition})`, resource.uri);
+                // console.log(`[${resource.label}] ${ur.allTransformationRemarks(resource).join(" | ")} (${resource.pipePosition})`, resource.uri);
             } else {
-                console.log(`[${resource.label}] no transformations`, resource.uri);
+                // console.log(`[${resource.label}] no transformations`, resource.uri);
             }
         });
         Expect(frc.count("Blank label")).toBe(9);

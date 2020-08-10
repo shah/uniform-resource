@@ -6,7 +6,7 @@ const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 
 const metaRefreshPattern = '(CONTENT|content)=["\']0;[ ]*(URL|url)=(.*?)(["\']\s*>)';
 
 export interface VisitResult {
-    readonly urlVisited: string;
+    readonly url: string;
 }
 
 export interface VisitError extends VisitResult {
@@ -15,7 +15,7 @@ export interface VisitError extends VisitResult {
 
 export interface VisitSuccess extends VisitResult {
     readonly httpStatus: number;
-    readonly responseHeaders: nf.Headers;
+    readonly httpHeaders: nf.Headers;
 }
 
 export interface RedirectResult extends VisitSuccess {
@@ -77,19 +77,19 @@ async function visit(originalURL: string): Promise<ConstrainedVisitResult> {
         const location = response.headers.get('location');
         if (!location) {
             return {
-                urlVisited: url,
+                url: url,
                 error: new Error(`${url} responded with status ${response.status} but no location header`)
             }
         }
-        return { urlVisited: url, httpRedirect: true, httpStatus: response.status, redirectUrl: location, responseHeaders: response.headers };
+        return { url: url, httpRedirect: true, httpStatus: response.status, redirectUrl: location, httpHeaders: response.headers };
     } else if (response.status == 200) {
         const text = await response.text();
         const redirectUrl = extractMetaRefreshUrl(text);
         return redirectUrl ?
-            { urlVisited: url, metaRefreshRedirect: true, httpStatus: response.status, redirectUrl: redirectUrl, content: text, responseHeaders: response.headers } :
-            { urlVisited: url, httpStatus: response.status, terminalResult: true, terminalContentResult: true, content: text, responseHeaders: response.headers }
+            { url: url, metaRefreshRedirect: true, httpStatus: response.status, redirectUrl: redirectUrl, content: "text", httpHeaders: response.headers } :
+            { url: url, httpStatus: response.status, terminalResult: true, terminalContentResult: true, content: "text", httpHeaders: response.headers }
     } else {
-        return { urlVisited: url, httpStatus: response.status, responseHeaders: response.headers, terminalResult: true }
+        return { url: url, httpStatus: response.status, httpHeaders: response.headers, terminalResult: true }
     }
 }
 
@@ -114,7 +114,7 @@ export async function follow(originalURL: string, maxDepth: number = 10): Promis
             }
         } catch (err) {
             keepGoing = false;
-            visits.push({ urlVisited: url!, error: err } as VisitError);
+            visits.push({ url: url!, error: err } as VisitError);
         }
     }
     return visits;
