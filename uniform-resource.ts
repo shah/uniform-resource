@@ -1,15 +1,22 @@
-import cheerio from "cheerio";
-import { follow, VisitResult } from "./follow-urls"
+import * as c from "./content";
 
 export type UniformResourceIdentifier = string;
 export type UniformResourceLabel = string;
 export type UniformResourceName = string;
 export type DigitalObjectIdentifier = string;
 
+export interface UniformResourceContext {
+    readonly isUniformResourceContext: true;
+}
+
 export interface UniformResourcesSupplier {
     readonly isUniformResourceSupplier: true;
-    readonly resources?: UniformResource[];
-    forEachResource?(urc: UniformResourceConsumer): Promise<void>;
+    resourceFromAnchor(
+        ctx: UniformResourceContext,
+        anchor: c.HtmlAnchor): Promise<UniformResource | undefined>
+    forEachResource?(
+        ctx: UniformResourceContext,
+        urc: UniformResourceConsumer): Promise<void>;
 }
 
 export interface UniformResourceProvenance {
@@ -23,12 +30,13 @@ export interface UniformResource {
     readonly uri: UniformResourceIdentifier;
     readonly doi?: DigitalObjectIdentifier;
     readonly label?: UniformResourceLabel;
+    readonly content?: c.QueryableContent;
 }
 
 export interface TransformedResource extends UniformResource {
     readonly isTransformedResource: true;
-    readonly chainIndex: number;
-    readonly original: UniformResource;
+    readonly transformedFromUR: UniformResource;
+    readonly pipePosition: number;
     readonly remarks?: string;
 }
 
@@ -36,8 +44,8 @@ export function isTransformedResource(o: any): o is TransformedResource {
     return o && "isTransformedResource" in o;
 }
 
-export function transformationChainIndex(o: any): number {
-    return isTransformedResource(o) ? o.chainIndex + 1 : 0;
+export function transformationPipePosition(o: any): number {
+    return isTransformedResource(o) ? o.pipePosition + 1 : 0;
 }
 
 export function allTransformationRemarks(tr: TransformedResource): string[] {
@@ -45,7 +53,7 @@ export function allTransformationRemarks(tr: TransformedResource): string[] {
     let active: UniformResource = tr;
     while (isTransformedResource(active)) {
         result.unshift(active.remarks || "(no remarks)");
-        active = active.original;
+        active = active.transformedFromUR;
     }
     return result;
 }
@@ -60,7 +68,7 @@ export interface UniformResourceFilter {
 }
 
 export interface UniformResourceTransformer {
-    transform(resource: UniformResource): Promise<UniformResource | TransformedResource>;
+    transform(ctx: UniformResourceContext, resource: UniformResource): Promise<UniformResource | TransformedResource>;
 }
 
 export interface UniformResourceFindOptions {
@@ -80,198 +88,71 @@ export interface UniformResourceConsumer {
     (resource: UniformResource): void;
 }
 
-export class BrowserTraversibleFilter implements UniformResourceFilter {
-    static singleton = new BrowserTraversibleFilter();
-
-    constructor(readonly reporter?: UniformResourceFilterReporter) {
-    }
-
-    retainOriginal(resource: UniformResource): boolean {
-        if (resource.uri.startsWith("mailto:")) {
-            if (this.reporter) {
-                this.reporter(resource);
-            }
-            return false;
-        }
-        return true;
-    }
-}
-
-export class RemoveLabelLineBreaksAndTrimSpaces implements UniformResourceTransformer {
-    static singleton = new RemoveLabelLineBreaksAndTrimSpaces();
-
-    async transform(resource: UniformResource): Promise<UniformResource | TransformedResource> {
-        if (!resource.label) {
-            return resource;
-        }
-
-        const cleanLabel = resource.label.replace(/\r\n|\n|\r/gm, " ").trim()
-        if (cleanLabel != resource.label) {
-            return {
-                isTransformedResource: true,
-                ...resource,
-                chainIndex: transformationChainIndex(resource),
-                original: resource,
-                label: cleanLabel,
-                remarks: "Removed line breaks and trimmed spaces"
-            }
-        }
-        return resource;
-    }
-}
-
-export interface FollowedResource extends TransformedResource {
-    readonly isFollowedResource: true;
-    readonly followResults: VisitResult[];
-}
-
-export class FollowLinksAndRemoveTracking implements UniformResourceTransformer {
-    static singleton = new FollowLinksAndRemoveTracking();
-
-    removeTracking(resource: UniformResource): UniformResource {
-        const cleanedURI = resource.uri.replace(/(?<=&|\?)utm_.*?(&|$)/igm, "");
-        if (cleanedURI != resource.uri) {
-            const transformed: TransformedResource = {
-                isTransformedResource: true,
-                ...resource,
-                chainIndex: transformationChainIndex(resource),
-                original: resource,
-                remarks: "Removed utm_* tracking parameters",
-            }
-            return transformed;
-        } else {
-            return resource;
-        }
-    }
-
-    async transform(resource: UniformResource): Promise<UniformResource | FollowedResource> {
-        let result: UniformResource | FollowedResource = resource;
-        const visitResults = await follow(resource.uri);
-        if (visitResults.length > 1) {
-            const last = visitResults[visitResults.length - 1];
-            result = {
-                isTransformedResource: true,
-                ...resource,
-                chainIndex: transformationChainIndex(resource),
-                original: resource,
-                remarks: "Followed, with " + visitResults.length + " results",
-                isFollowedResource: true,
-                followResults: visitResults,
-                uri: last.url
-            };
-        }
-        return this.removeTracking(result);
-    }
-}
-
-export function chainedFilter(...chain: UniformResourceFilter[]): UniformResourceFilter {
-    return new class implements UniformResourceFilter {
-        retainOriginal(resource: UniformResource): boolean {
-            for (const c of chain) {
-                if (c.retainOriginal) {
-                    if (!c.retainOriginal(resource)) {
-                        return false;
-                    }
-                }
-            }
-            return true;
-        }
-
-        retainTransformed(resource: TransformedResource): boolean {
-            for (const c of chain) {
-                if (c.retainTransformed) {
-                    if (!c.retainTransformed(resource)) {
-                        return false;
-                    }
-                }
-            }
-            return true;
-        }
-    }()
-}
-
-export function chainedTransformer(...chain: UniformResourceTransformer[]): UniformResourceTransformer {
-    if (chain.length == 0) {
-        return new class implements UniformResourceTransformer {
-            async transform(resource: UniformResource): Promise<UniformResource> {
-                return resource;
-            }
-        }()
-    }
-    if (chain.length == 1) {
-        return new class implements UniformResourceTransformer {
-            async transform(resource: UniformResource): Promise<UniformResource | TransformedResource> {
-                return await chain[0].transform(resource);
-            }
-        }()
-    }
-    return new class implements UniformResourceTransformer {
-        async transform(resource: UniformResource): Promise<UniformResource | TransformedResource> {
-            let result = await chain[0].transform(resource);
-            for (let i = 1; i < chain.length; i++) {
-                result = await chain[i].transform(result);
-            }
-            return result;
-        }
-    }()
-}
-
-export interface EmailMessageOptions {
+export interface CommonSupplierOptions {
     readonly originURN: UniformResourceName;
-    readonly htmlSource: string;
     readonly filter?: UniformResourceFilter;
     readonly transformer?: UniformResourceTransformer;
 }
 
-export class EmailMessageResourcesSupplier implements UniformResourceProvenance, UniformResourcesSupplier {
+export interface EmailMessageOptions extends CommonSupplierOptions {
+    readonly htmlSource: string;
+}
+
+export class TypicalResourcesSupplier implements UniformResourceProvenance, UniformResourcesSupplier {
     readonly isUniformResourceSupplier = true;
     readonly isUniformResourceProvenance = true;
-    readonly content: CheerioStatic;
     readonly originURN: UniformResourceName;
     readonly filter?: UniformResourceFilter;
     readonly transformer?: UniformResourceTransformer;
 
-    constructor({ originURN, htmlSource, filter, transformer }: EmailMessageOptions) {
+    constructor({ originURN, filter, transformer }: CommonSupplierOptions) {
         this.originURN = originURN;
-        this.content = cheerio.load(htmlSource, {
-            normalizeWhitespace: true,
-            decodeEntities: true,
-        });
         this.filter = filter;
         this.transformer = transformer;
     }
 
-    async forEachResource(consume: UniformResourceConsumer): Promise<void> {
-        const resources: UniformResource[] = [];
-        this.content("a").each((index, anchor): void => {
-            const originURI = anchor.attribs["href"];
-            if (originURI) {
-                const originLabel = this.content(anchor).text();
-                let original: UniformResource = {
-                    isUniformResource: true,
-                    provenance: this,
-                    uri: originURI,
-                    label: originLabel
-                };
-                if (this.filter && this.filter.retainOriginal) {
-                    if (this.filter.retainOriginal(original)) {
-                        resources.push(original);
-                    }
-                }
-            }
-        });
-        for (const original of resources) {
-            if (this.transformer) {
-                let transformed = await this.transformer.transform(original);
-                if (this.filter && this.filter.retainTransformed) {
-                    if (!this.filter.retainTransformed(transformed)) {
-                        return;
-                    }
-                }
-                consume(transformed);
-            } else {
-                consume(original);
+    async resourceFromAnchor(ctx: UniformResourceContext, anchor: c.HtmlAnchor): Promise<UniformResource | undefined> {
+        let original: UniformResource = {
+            isUniformResource: true,
+            provenance: this,
+            uri: anchor.href,
+            label: anchor.label
+        };
+        if (this.filter && this.filter.retainOriginal) {
+            if (!this.filter.retainOriginal(original)) {
+                return undefined;
             }
         }
+        if (this.transformer) {
+            const transformed = await this.transformer.transform(ctx, original);
+            if (this.filter && this.filter.retainTransformed) {
+                if (!this.filter.retainTransformed(transformed)) {
+                    return undefined;
+                }
+            }
+            return transformed;
+        } else {
+            return original;
+        }
     }
+}
+
+export class HtmlContentResourcesSupplier extends TypicalResourcesSupplier {
+    readonly content: c.QueryableHtmlContent;
+
+    constructor({ originURN, htmlSource, filter, transformer }: EmailMessageOptions) {
+        super({ originURN, filter, transformer });
+        this.content = new c.TypicalQueryableHtmlContent(htmlSource);
+    }
+
+    async forEachResource(ctx: UniformResourceContext, consume: UniformResourceConsumer): Promise<void> {
+        const anchors = this.content.anchors();
+        for (const anchor of anchors) {
+            const ur = await this.resourceFromAnchor(ctx, anchor);
+            if (ur) consume(ur);
+        }
+    }
+}
+
+export class EmailMessageResourcesSupplier extends HtmlContentResourcesSupplier {
 }
