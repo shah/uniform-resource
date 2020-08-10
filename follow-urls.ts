@@ -1,8 +1,8 @@
 import * as nf from "node-fetch";
+import UserAgent from 'user-agents';
+import mime from "whatwg-mimetype";
 
 // Built from https://github.com/jksolbakken/linkfollower/blob/master/linkfollower.js
-
-const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/42.0.2311.135 Safari/537.36 Edge/12.246'
 const metaRefreshPattern = '(CONTENT|content)=["\']0;[ ]*(URL|url)=(.*?)(["\']\s*>)';
 
 export interface VisitResult {
@@ -37,6 +37,8 @@ export function isHttpRedirectResult(o: any): o is HttpRedirectResult {
 export interface ContentRedirectResult extends VisitSuccess {
     readonly metaRefreshRedirect: boolean;
     readonly content: string;
+    readonly contentType: string;
+    readonly mimeType: mime;
 }
 
 export function isContentRedirectResult(o: any): o is ContentRedirectResult {
@@ -45,6 +47,8 @@ export function isContentRedirectResult(o: any): o is ContentRedirectResult {
 
 export interface TerminalResult extends VisitSuccess {
     readonly terminalResult: boolean;
+    readonly contentType: string;
+    readonly mimeType: mime;
 }
 
 export function isTerminalResult(o: any): o is TerminalResult {
@@ -62,14 +66,13 @@ export function isTerminalContentResult(o: any): o is TerminalContentResult {
 
 export type ConstrainedVisitResult = VisitError | HttpRedirectResult | ContentRedirectResult | TerminalResult | TerminalContentResult;
 
-async function visit(originalURL: string): Promise<ConstrainedVisitResult> {
+async function visit(originalURL: string, userAgent: UserAgent): Promise<ConstrainedVisitResult> {
     const url = prefixWithHttp(originalURL)
     const response = await nf.default(url, {
         redirect: 'manual',
         follow: 0,
         headers: {
-            'User-Agent': userAgent,
-            'Accept': 'text/html'
+            'User-Agent': userAgent.toString(),
         }
     })
 
@@ -82,18 +85,22 @@ async function visit(originalURL: string): Promise<ConstrainedVisitResult> {
             }
         }
         return { url: url, httpRedirect: true, httpStatus: response.status, redirectUrl: location, httpHeaders: response.headers };
-    } else if (response.status == 200) {
-        const text = await response.text();
-        const redirectUrl = extractMetaRefreshUrl(text);
-        return redirectUrl ?
-            { url: url, metaRefreshRedirect: true, httpStatus: response.status, redirectUrl: redirectUrl, content: "text", httpHeaders: response.headers } :
-            { url: url, httpStatus: response.status, terminalResult: true, terminalContentResult: true, content: "text", httpHeaders: response.headers }
-    } else {
-        return { url: url, httpStatus: response.status, httpHeaders: response.headers, terminalResult: true }
     }
+    const contentType = response.headers.get("Content-Type")!
+    const mimeType = new mime(contentType);
+    if (response.status == 200) {
+        if (mimeType.type == "text") {
+            const text = await response.text();
+            const redirectUrl = extractMetaRefreshUrl(text);
+            return redirectUrl ?
+                { url: url, metaRefreshRedirect: true, httpStatus: response.status, redirectUrl: redirectUrl, content: text, httpHeaders: response.headers, contentType: contentType, mimeType: mimeType } :
+                { url: url, httpStatus: response.status, terminalResult: true, terminalContentResult: true, content: text, httpHeaders: response.headers, contentType: contentType, mimeType: mimeType }
+        }
+    }
+    return { url: url, httpStatus: response.status, httpHeaders: response.headers, terminalResult: true, contentType: contentType, mimeType: mimeType }
 }
 
-export async function follow(originalURL: string, maxDepth: number = 10): Promise<VisitResult[]> {
+export async function follow(originalURL: string, userAgent = new UserAgent(), maxDepth: number = 10): Promise<VisitResult[]> {
     const visits: VisitResult[] = [];
     let url: string | undefined | null = originalURL;
     let count = 1;
@@ -103,7 +110,7 @@ export async function follow(originalURL: string, maxDepth: number = 10): Promis
             throw `Exceeded max redirect depth of ${maxDepth}`
         }
         try {
-            const visitResult: ConstrainedVisitResult = await visit(url!);
+            const visitResult: ConstrainedVisitResult = await visit(url!, userAgent);
             count++;
             visits.push(visitResult);
             if (isRedirectResult(visitResult)) {

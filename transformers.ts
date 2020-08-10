@@ -1,4 +1,5 @@
-import { follow, VisitResult } from "./follow-urls";
+import * as c from "./content";
+import * as f from "./follow-urls";
 import * as ur from "./uniform-resource";
 
 export class RemoveLabelLineBreaksAndTrimSpaces implements ur.UniformResourceTransformer {
@@ -17,7 +18,7 @@ export class RemoveLabelLineBreaksAndTrimSpaces implements ur.UniformResourceTra
                 pipePosition: ur.nextTransformationPipePosition(resource),
                 transformedFromUR: resource,
                 label: cleanLabel,
-                remarks: "Removed line breaks and trimmed spaces"
+                remarks: "Removed line breaks and trimmed spaces in label"
             }
         }
         return resource;
@@ -35,7 +36,7 @@ export class RemoveTrackingCodesFromUrl implements ur.UniformResourceTransformer
                 ...resource,
                 pipePosition: ur.nextTransformationPipePosition(resource),
                 transformedFromUR: resource,
-                remarks: "Removed utm_* tracking parameters",
+                remarks: "Removed utm_* tracking parameters from URL",
             }
             return transformed;
         } else {
@@ -46,7 +47,7 @@ export class RemoveTrackingCodesFromUrl implements ur.UniformResourceTransformer
 
 export interface FollowedResource extends ur.TransformedResource {
     readonly isFollowedResource: true;
-    readonly followResults: VisitResult[];
+    readonly followResults: f.VisitResult[];
 }
 
 export class FollowRedirectsGranular implements ur.UniformResourceTransformer {
@@ -54,19 +55,22 @@ export class FollowRedirectsGranular implements ur.UniformResourceTransformer {
 
     async transform(ctx: ur.UniformResourceContext, resource: ur.UniformResource): Promise<ur.UniformResource | FollowedResource> {
         let result: ur.UniformResource | FollowedResource = resource;
-        const visitResults = await follow(resource.uri);
-        if (visitResults.length > 1) {
+        const visitResults = await f.follow(resource.uri);
+        if (visitResults.length > 0) {
             const last = visitResults[visitResults.length - 1];
-            result = {
-                isTransformedResource: true,
-                ...resource,
-                pipePosition: ur.nextTransformationPipePosition(resource),
-                transformedFromUR: resource,
-                remarks: "Followed, with " + visitResults.length + " results",
-                isFollowedResource: true,
-                followResults: visitResults,
-                uri: last.url
-            };
+            if (f.isTerminalContentResult(last)) {
+                result = {
+                    isTransformedResource: true,
+                    ...resource,
+                    pipePosition: ur.nextTransformationPipePosition(resource),
+                    transformedFromUR: resource,
+                    remarks: "Followed, with " + visitResults.length + " results",
+                    isFollowedResource: true,
+                    followResults: visitResults,
+                    uri: last.url,
+                    content: new c.TypicalQueryableHtmlContent(last.content)
+                };
+            }
         }
         return result;
     }
