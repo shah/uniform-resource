@@ -80,7 +80,7 @@ export class TestSuite {
                 const sg = resource.content.socialGraph;
                 Expect(sg.openGraph).toBeDefined();
                 Expect(sg.openGraph?.type).toBe("article");
-                Expect(sg.openGraph?.title).toBe("Photo of Donald Trump 'look-alike' in Spain goes viral");
+                Expect(sg.openGraph?.title).toBe(resource.content.title);
             }
         }
     }
