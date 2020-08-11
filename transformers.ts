@@ -1,6 +1,7 @@
 import * as c from "./content";
 import * as f from "./follow-urls";
 import * as ur from "./uniform-resource";
+import { Cache, lruCache } from "./cache";
 
 export class RemoveLabelLineBreaksAndTrimSpaces implements ur.UniformResourceTransformer {
     static readonly singleton = new RemoveLabelLineBreaksAndTrimSpaces();
@@ -58,9 +59,16 @@ export function isFollowedResource(o: any): o is FollowedResource {
 export class FollowRedirectsGranular implements ur.UniformResourceTransformer {
     static readonly singleton = new FollowRedirectsGranular();
 
+    constructor(readonly cache: Cache<f.VisitResult[]> = lruCache()) {
+    }
+
     async transform(ctx: ur.UniformResourceContext, resource: ur.UniformResource): Promise<ur.UniformResource | ur.InvalidResource | FollowedResource> {
         let result: ur.UniformResource | ur.InvalidResource | FollowedResource = resource;
-        const visitResults = await f.follow(resource.uri);
+        let visitResults = this.cache[resource.uri];
+        if (!visitResults) {
+            visitResults = await f.follow(resource.uri);
+            this.cache[resource.uri] = visitResults;
+        }
         if (visitResults.length > 0) {
             const last = visitResults[visitResults.length - 1];
             if (f.isTerminalResult(last)) {

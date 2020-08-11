@@ -1,4 +1,5 @@
-import { Expect, Test, TestCase, TestFixture, Timeout } from "alsatian";
+import { Expect, Test, TestCase, TestFixture, Timeout, IgnoreTest } from "alsatian";
+import { lruCache, Cache } from "./cache";
 import * as fs from "fs";
 import * as c from "./content";
 import * as filters from "./filters";
@@ -9,10 +10,27 @@ import * as ur from "./uniform-resource";
 
 @TestFixture("Uniform Resource Test Suite")
 export class TestSuite {
+    readonly redirectVisitsCache: Cache<follow.VisitResult[]>;
+    readonly typicalSupplier: s.TypicalResourcesSupplier;
+    readonly ctx: ur.UniformResourceContext;
+
+    constructor() {
+        this.redirectVisitsCache = lruCache();
+        this.typicalSupplier = new s.TypicalResourcesSupplier({
+            originURN: `test`,
+            transformer: tr.transformationPipe(
+                new tr.FollowRedirectsGranular(this.redirectVisitsCache),
+                tr.AcquireQueryableContent.singleton),
+        });
+        this.ctx = {
+            isUniformResourceContext: true
+        }
+    }
+
     @TestCase("provenance-email-base64.spec.txt")
     @Test("Base 64 Encoded E-mail Body")
     @Timeout(30000)
-    //@IgnoreTest("Temporary, this takes time to run")
+    @IgnoreTest("Temporary, this takes time to run")
     async testBase64EncodedEmail(base64EncodedHtmlFileName: string): Promise<void> {
         const base64Content = fs.readFileSync(base64EncodedHtmlFileName);
         Expect(base64Content).toBeDefined();
@@ -48,18 +66,9 @@ export class TestSuite {
     }
 
     @Timeout(10000)
-    @Test("Test a single, valid, redirected (traversed/followed) UniformResource")
-    async testSingleValidUniformResource(): Promise<void> {
-        const supplier = new s.TypicalResourcesSupplier({
-            originURN: `test`,
-            transformer: tr.transformationPipe(
-                tr.FollowRedirectsGranular.singleton,
-                tr.AcquireQueryableContent.singleton)
-        })
-        const ctx: ur.UniformResourceContext = {
-            isUniformResourceContext: true
-        }
-        const resource = await supplier.resourceFromAnchor(ctx, { href: "https://t.co/ELrZmo81wI" });
+    @Test("Test a single, valid, redirected (traversed/followed) resource")
+    async testSingleValidFollowedResource(): Promise<void> {
+        const resource = await this.typicalSupplier.resourceFromAnchor(this.ctx, { href: "https://t.co/ELrZmo81wI" });
         Expect(resource).toBeDefined();
         Expect(tr.isFollowedResource(resource)).toBe(true);
         if (tr.isFollowedResource(resource)) {
@@ -67,11 +76,25 @@ export class TestSuite {
             Expect(follow.isTerminalTextContentResult(resource.terminalResult)).toBe(true);
             Expect(resource.uri).toBe("https://www.foxnews.com/lifestyle/photo-of-donald-trump-look-alike-in-spain-goes-viral");
         }
+    }
+
+    @Timeout(10000)
+    @Test("Test a single, valid, governed content")
+    async testSingleValidGovernedContent(): Promise<void> {
+        const resource = await this.typicalSupplier.resourceFromAnchor(this.ctx, { href: "https://t.co/ELrZmo81wI" });
+        Expect(resource).toBeDefined();
         Expect(c.isGovernedContent(resource)).toBe(true);
         if (c.isGovernedContent(resource)) {
             Expect(resource.contentType).toBe("text/html; charset=utf-8");
             Expect(resource.mimeType.essence).toBe("text/html");
         }
+    }
+
+    @Timeout(10000)
+    @Test("Test a single, valid, UniformResourceContent")
+    async testSingleValidResourceContent(): Promise<void> {
+        const resource = await this.typicalSupplier.resourceFromAnchor(this.ctx, { href: "https://t.co/ELrZmo81wI" });
+        Expect(resource).toBeDefined();
         Expect(ur.isUniformResourceContent(resource)).toBe(true);
         if (ur.isUniformResourceContent(resource)) {
             Expect(resource.content.title).toBe("Photo of Donald Trump 'look-alike' in Spain goes viral");
@@ -88,15 +111,7 @@ export class TestSuite {
     @Timeout(10000)
     @Test("Test a single, invalid (HTTP status 404) resource")
     async testSingleInvalidUniformResource(): Promise<void> {
-        const supplier = new s.TypicalResourcesSupplier({
-            originURN: `test`,
-            transformer: tr.transformationPipe(
-                tr.FollowRedirectsGranular.singleton)
-        })
-        const ctx: ur.UniformResourceContext = {
-            isUniformResourceContext: true
-        }
-        const resource = await supplier.resourceFromAnchor(ctx, { href: "https://t.co/fDxPF" });
+        const resource = await this.typicalSupplier.resourceFromAnchor(this.ctx, { href: "https://t.co/fDxPF" });
         Expect(resource).toBeDefined();
         Expect(tr.isFollowedResource(resource)).toBe(true);
         if (tr.isFollowedResource(resource)) {
@@ -111,15 +126,7 @@ export class TestSuite {
     @Timeout(30000)
     @Test("Test a single, badly formed URL")
     async testSingleInvalidURL(): Promise<void> {
-        const supplier = new s.TypicalResourcesSupplier({
-            originURN: `test`,
-            transformer: tr.transformationPipe(
-                tr.FollowRedirectsGranular.singleton)
-        })
-        const ctx: ur.UniformResourceContext = {
-            isUniformResourceContext: true
-        }
-        const resource = await supplier.resourceFromAnchor(ctx, { href: "https://t" });
+        const resource = await this.typicalSupplier.resourceFromAnchor(this.ctx, { href: "https://t" });
         Expect(resource).toBeDefined();
         Expect(ur.isInvalidResource(resource)).toBe(true);
         if (ur.isInvalidResource(resource)) {

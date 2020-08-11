@@ -74,7 +74,7 @@ export interface FollowOptions {
     readonly userAgent: UserAgent;
     readonly maxRedirectDepth: number;
     readonly fetchTimeOut: number;
-    readonly cacheContentRedirectText: boolean;
+    readonly saveContentRedirectText: boolean;
     prepareUrlForFetch?(originalURL: string, position: number): string;
     extractMetaRefreshUrl(html: string): string | null;
     isRedirect(status: number): boolean;
@@ -108,7 +108,7 @@ async function visit(originalURL: string, position: number, options: FollowOptio
             const text = await response.text();
             const redirectUrl = options.extractMetaRefreshUrl(text);
             return redirectUrl ?
-                { url: url, metaRefreshRedirect: true, httpStatus: response.status, redirectUrl: redirectUrl, contentText: options.cacheContentRedirectText ? text : undefined, httpHeaders: response.headers, contentType: contentType, mimeType: mimeType } :
+                { url: url, metaRefreshRedirect: true, httpStatus: response.status, redirectUrl: redirectUrl, contentText: options.saveContentRedirectText ? text : undefined, httpHeaders: response.headers, contentType: contentType, mimeType: mimeType } :
                 { url: url, httpStatus: response.status, terminalResult: true, terminalTextContentResult: true, contentText: text, httpHeaders: response.headers, contentType: contentType, mimeType: mimeType }
         }
     }
@@ -120,13 +120,13 @@ export class TypicalFollowOptions implements FollowOptions {
     readonly userAgent: UserAgent;
     readonly maxRedirectDepth: number;
     readonly fetchTimeOut: number;
-    readonly cacheContentRedirectText: boolean;
+    readonly saveContentRedirectText: boolean;
 
-    constructor({ userAgent, maxRedirectDepth, fetchTimeOut, cacheContentRedirectText }: Partial<FollowOptions>) {
+    constructor({ userAgent, maxRedirectDepth, fetchTimeOut, saveContentRedirectText: cacheContentRedirectText }: Partial<FollowOptions>) {
         this.userAgent = userAgent || new UserAgent();
         this.maxRedirectDepth = typeof maxRedirectDepth === "undefined" ? 10 : maxRedirectDepth;
         this.fetchTimeOut = typeof fetchTimeOut === "undefined" ? 2500 : fetchTimeOut;
-        this.cacheContentRedirectText = typeof cacheContentRedirectText === "undefined" ? false : cacheContentRedirectText;
+        this.saveContentRedirectText = typeof cacheContentRedirectText === "undefined" ? false : cacheContentRedirectText;
     }
 
     prepareUrlForFetch(url: string): string {
