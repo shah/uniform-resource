@@ -66,9 +66,9 @@ export class TestSuite {
             Expect(resource.uri).toBe("https://www.foxnews.com/lifestyle/photo-of-donald-trump-look-alike-in-spain-goes-viral");
             if (follow.isTerminalTextContentResult(resource.terminalResult)) {
                 Expect(resource.terminalResult.mimeType.essence).toBe("text/html");
-                Expect(resource.content?.title).toBe("Photo of Donald Trump 'look-alike' in Spain goes viral");
-                Expect(resource.content?.socialGraph).toBeDefined();
-                if (resource.content?.socialGraph) {
+                Expect(resource.content.title).toBe("Photo of Donald Trump 'look-alike' in Spain goes viral");
+                Expect(resource.content.socialGraph).toBeDefined();
+                if (resource.content.socialGraph) {
                     const sg = resource.content.socialGraph;
                     Expect(sg.openGraph).toBeDefined();
                     Expect(sg.openGraph?.type).toBe("article");

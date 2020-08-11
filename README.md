@@ -44,8 +44,8 @@ Here's the simplest usage. Check out the test specs for more complex use cases.
             console.log("The final, terminated URL:", resource.uri);
             if (follow.isTerminalTextContentResult(resource.terminalResult)) {
                 // this means that the resource was determined to be a text/HTML resource
-                console.log("Title", resource.content?.title);
-                console.dir("Social Graph", resource.content?.socialGraph);
+                console.log("Title", resource.content.title);
+                console.dir("Social Graph", resource.content.socialGraph);
             }
         }
     }

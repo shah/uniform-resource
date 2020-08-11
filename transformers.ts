@@ -45,7 +45,7 @@ export class RemoveTrackingCodesFromUrl implements ur.UniformResourceTransformer
     }
 }
 
-export interface FollowedResource extends ur.TransformedResource {
+export interface FollowedResource extends ur.TransformedResource, ur.UniformResourceContent {
     readonly isFollowedResource: true;
     readonly terminalResult: f.VisitResult;
     readonly followResults: f.VisitResult[];
@@ -73,6 +73,7 @@ export class FollowRedirectsGranular implements ur.UniformResourceTransformer {
                     isFollowedResource: true,
                     followResults: visitResults,
                     uri: last.url,
+                    isUniformResourceContent: true,
                     content: f.isTerminalTextContentResult(last) ? new c.TypicalQueryableHtmlContent(last.content) : undefined,
                     terminalResult: last
                 };

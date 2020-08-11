@@ -30,7 +30,15 @@ export interface UniformResource {
     readonly uri: UniformResourceIdentifier;
     readonly doi?: DigitalObjectIdentifier;
     readonly label?: UniformResourceLabel;
-    readonly content?: c.QueryableContent;
+}
+
+export interface UniformResourceContent {
+    readonly isUniformResourceContent: true;
+    readonly content: c.QueryableContent;
+}
+
+export function isUniformResourceContent(o: any): o is UniformResourceContent {
+    return o && "isUniformResourceContent" in o;
 }
 
 export interface TransformedResource extends UniformResource {
