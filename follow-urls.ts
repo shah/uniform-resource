@@ -2,8 +2,8 @@ import * as nf from "node-fetch";
 import UserAgent from 'user-agents';
 import mime from "whatwg-mimetype";
 
-// Built from https://github.com/jksolbakken/linkfollower/blob/master/linkfollower.js
 const metaRefreshPattern = '(CONTENT|content)=["\']0;[ ]*(URL|url)=(.*?)(["\']\s*>)';
+const urlTrackingCodesPattern = /(?<=&|\?)utm_.*?(&|$)/igm;
 
 export interface VisitResult {
     readonly url: string;
@@ -11,6 +11,10 @@ export interface VisitResult {
 
 export interface VisitError extends VisitResult {
     readonly error: Error;
+}
+
+export function isVisitError(o: VisitResult): o is VisitError {
+    return "error" in o;
 }
 
 export interface VisitSuccess extends VisitResult {
@@ -22,16 +26,16 @@ export interface RedirectResult extends VisitSuccess {
     readonly redirectUrl: string;
 }
 
-export function isRedirectResult(o: any): o is RedirectResult {
-    return o && "redirectUrl" in o;
+export function isRedirectResult(o: VisitResult): o is RedirectResult {
+    return "redirectUrl" in o;
 }
 
 export interface HttpRedirectResult extends RedirectResult {
     readonly httpRedirect: boolean;
 }
 
-export function isHttpRedirectResult(o: any): o is HttpRedirectResult {
-    return o && "httpRedirect" in o;
+export function isHttpRedirectResult(o: VisitResult): o is HttpRedirectResult {
+    return "httpRedirect" in o;
 }
 
 export interface ContentRedirectResult extends VisitSuccess {
@@ -41,8 +45,8 @@ export interface ContentRedirectResult extends VisitSuccess {
     readonly mimeType: mime;
 }
 
-export function isContentRedirectResult(o: any): o is ContentRedirectResult {
-    return o && "metaRefreshRedirect" in o;
+export function isContentRedirectResult(o: VisitResult): o is ContentRedirectResult {
+    return "metaRefreshRedirect" in o;
 }
 
 export interface TerminalResult extends VisitSuccess {
@@ -51,32 +55,42 @@ export interface TerminalResult extends VisitSuccess {
     readonly mimeType: mime;
 }
 
-export function isTerminalResult(o: any): o is TerminalResult {
-    return o && "terminalResult" in o;
+export function isTerminalResult(o: VisitResult): o is TerminalResult {
+    return "terminalResult" in o;
 }
 
-export interface TerminalContentResult extends TerminalResult {
-    readonly terminalContentResult: boolean;
+export interface TerminalTextContentResult extends TerminalResult {
+    readonly terminalTextContentResult: boolean;
     readonly content: string;
 }
 
-export function isTerminalContentResult(o: any): o is TerminalContentResult {
-    return o && "terminalContentResult" in o;
+export function isTerminalTextContentResult(o: VisitResult): o is TerminalTextContentResult {
+    return "terminalTextContentResult" in o;
 }
 
-export type ConstrainedVisitResult = VisitError | HttpRedirectResult | ContentRedirectResult | TerminalResult | TerminalContentResult;
+export type ConstrainedVisitResult = VisitError | HttpRedirectResult | ContentRedirectResult | TerminalResult | TerminalTextContentResult;
 
-async function visit(originalURL: string, userAgent: UserAgent): Promise<ConstrainedVisitResult> {
-    const url = prefixWithHttp(originalURL)
+export interface FollowOptions {
+    readonly userAgent: UserAgent;
+    readonly maxRedirectDepth: number;
+    readonly fetchTimeOut: number;
+    prepareUrlForFetch?(originalURL: string, position: number): string;
+    extractMetaRefreshUrl(html: string): string | null;
+    isRedirect(status: number): boolean;
+}
+
+async function visit(originalURL: string, position: number, options: FollowOptions): Promise<ConstrainedVisitResult> {
+    const url = options.prepareUrlForFetch ? options.prepareUrlForFetch(originalURL, position) : originalURL;
     const response = await nf.default(url, {
         redirect: 'manual',
         follow: 0,
+        timeout: options.fetchTimeOut,
         headers: {
-            'User-Agent': userAgent.toString(),
+            'User-Agent': options.userAgent.toString(),
         }
     })
 
-    if (isRedirect(response.status)) {
+    if (options.isRedirect(response.status)) {
         const location = response.headers.get('location');
         if (!location) {
             return {
@@ -91,27 +105,57 @@ async function visit(originalURL: string, userAgent: UserAgent): Promise<Constra
     if (response.status == 200) {
         if (mimeType.type == "text") {
             const text = await response.text();
-            const redirectUrl = extractMetaRefreshUrl(text);
+            const redirectUrl = options.extractMetaRefreshUrl(text);
             return redirectUrl ?
                 { url: url, metaRefreshRedirect: true, httpStatus: response.status, redirectUrl: redirectUrl, content: text, httpHeaders: response.headers, contentType: contentType, mimeType: mimeType } :
-                { url: url, httpStatus: response.status, terminalResult: true, terminalContentResult: true, content: text, httpHeaders: response.headers, contentType: contentType, mimeType: mimeType }
+                { url: url, httpStatus: response.status, terminalResult: true, terminalTextContentResult: true, content: text, httpHeaders: response.headers, contentType: contentType, mimeType: mimeType }
         }
     }
     return { url: url, httpStatus: response.status, httpHeaders: response.headers, terminalResult: true, contentType: contentType, mimeType: mimeType }
 }
 
-export async function follow(originalURL: string, userAgent = new UserAgent(), maxDepth: number = 10): Promise<VisitResult[]> {
+export class TypicalFollowOptions implements FollowOptions {
+    static readonly singleton = new TypicalFollowOptions({});
+    readonly userAgent: UserAgent;
+    readonly maxRedirectDepth: number;
+    readonly fetchTimeOut: number;
+
+    constructor({ userAgent, maxRedirectDepth, fetchTimeOut }: Partial<FollowOptions>) {
+        this.userAgent = userAgent || new UserAgent();
+        this.maxRedirectDepth = typeof maxRedirectDepth === "undefined" ? 10 : maxRedirectDepth;
+        this.fetchTimeOut = typeof fetchTimeOut === "undefined" ? 2500 : fetchTimeOut;
+    }
+
+    prepareUrlForFetch(url: string): string {
+        return url.replace(urlTrackingCodesPattern, "")
+    }
+
+    extractMetaRefreshUrl(html: string): string | null {
+        let match = html.match(metaRefreshPattern);
+        return match && match.length == 5 ? match[3] : null;
+    }
+
+    isRedirect(status: number): boolean {
+        return status === 301
+            || status === 302
+            || status === 303
+            || status === 307
+            || status === 308;
+    }
+};
+
+export async function follow(originalURL: string, options = TypicalFollowOptions.singleton): Promise<VisitResult[]> {
     const visits: VisitResult[] = [];
     let url: string | undefined | null = originalURL;
-    let count = 1;
+    let position = 1;
     let keepGoing = true;
     while (keepGoing) {
-        if (count > maxDepth) {
-            throw `Exceeded max redirect depth of ${maxDepth}`
+        if (position > options.maxRedirectDepth) {
+            throw `Exceeded max redirect depth of ${options.maxRedirectDepth}`
         }
         try {
-            const visitResult: ConstrainedVisitResult = await visit(url!, userAgent);
-            count++;
+            const visitResult: ConstrainedVisitResult = await visit(url!, position, options);
+            position++;
             visits.push(visitResult);
             if (isRedirectResult(visitResult)) {
                 keepGoing = true;
@@ -126,25 +170,3 @@ export async function follow(originalURL: string, userAgent = new UserAgent(), m
     }
     return visits;
 }
-
-function isRedirect(status: number): boolean {
-    return status === 301
-        || status === 302
-        || status === 303
-        || status === 307
-        || status === 308;
-}
-
-function extractMetaRefreshUrl(html: string) {
-    let match = html.match(metaRefreshPattern);
-    return match && match.length == 5 ? match[3] : null;
-}
-
-function prefixWithHttp(url: string): string {
-    let pattern = new RegExp('^http');
-    if (!pattern.test(url)) {
-        return 'http://' + url;
-    }
-    return url;
-}
-

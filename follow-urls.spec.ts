@@ -7,7 +7,7 @@ export class TestSuite {
     @TestCase("http://ui.constantcontact.com/sa/fwtf.jsp?llr=jwcorpsab&m=1119360584393&ea=periodicals%2Bhealthit-answersmedianetwork%40medigy.cc&a=1134632546554", "http://ui.constantcontact.com/sa/fwtf.jsp?llr=jwcorpsab&m=1119360584393&ea=periodicals%2Bhealthit-answersmedianetwork%40medigy.cc&a=1134632546554", 1)
     @Timeout(10000)
     @Test("Follow URL")
-    public async testFollow(originalURL: string, finalURL: string, redirects: number): Promise<void> {
+    async testFollow(originalURL: string, finalURL: string, redirects: number): Promise<void> {
         const visitResults = await f.follow(originalURL);
         Expect(visitResults).toBeDefined();
         Expect(visitResults.length).toBe(redirects);
@@ -16,7 +16,7 @@ export class TestSuite {
 
     @Timeout(10000)
     @Test("Follow URL and test granular visit results")
-    public async testVistResults(): Promise<void> {
+    async testVistResults(): Promise<void> {
         const visitResults = await f.follow("https://t.co/ELrZmo81wI");
         Expect(visitResults).toBeDefined();
         Expect(visitResults.length).toBe(5);
@@ -27,8 +27,8 @@ export class TestSuite {
         Expect(f.isHttpRedirectResult(visitResults[3])).toBe(true);
 
         const finalResult = visitResults[4];
-        Expect(f.isTerminalContentResult(finalResult)).toBe(true);
-        if (f.isTerminalContentResult(finalResult)) {
+        Expect(f.isTerminalTextContentResult(finalResult)).toBe(true);
+        if (f.isTerminalTextContentResult(finalResult)) {
             Expect(finalResult.url).toBe("https://www.foxnews.com/lifestyle/photo-of-donald-trump-look-alike-in-spain-goes-viral");
             Expect(finalResult.httpHeaders.get("Content-Type")).toBe("text/html; charset=utf-8");
             Expect(finalResult.content).toBeDefined();

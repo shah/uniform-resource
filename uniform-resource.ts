@@ -44,6 +44,16 @@ export function isTransformedResource(o: any): o is TransformedResource {
     return o && "isTransformedResource" in o;
 }
 
+export interface InvalidResource extends UniformResource {
+    readonly isInvalidResource: true;
+    readonly error: Error;
+    readonly remarks?: string;
+}
+
+export function isInvalidResource(o: any): o is InvalidResource {
+    return o && "isInvalidResource" in o;
+}
+
 export function nextTransformationPipePosition(o: any): number {
     return isTransformedResource(o) ? o.pipePosition + 1 : 0;
 }
@@ -87,4 +97,3 @@ export interface UniformResourceLocation {
 export interface UniformResourceConsumer {
     (resource: UniformResource): void;
 }
-

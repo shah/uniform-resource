@@ -47,18 +47,23 @@ export class RemoveTrackingCodesFromUrl implements ur.UniformResourceTransformer
 
 export interface FollowedResource extends ur.TransformedResource {
     readonly isFollowedResource: true;
+    readonly terminalResult: f.VisitResult;
     readonly followResults: f.VisitResult[];
+}
+
+export function isFollowedResource(o: any): o is FollowedResource {
+    return o && "isFollowedResource" in o;
 }
 
 export class FollowRedirectsGranular implements ur.UniformResourceTransformer {
     static readonly singleton = new FollowRedirectsGranular();
 
-    async transform(ctx: ur.UniformResourceContext, resource: ur.UniformResource): Promise<ur.UniformResource | FollowedResource> {
-        let result: ur.UniformResource | FollowedResource = resource;
+    async transform(ctx: ur.UniformResourceContext, resource: ur.UniformResource): Promise<ur.UniformResource | ur.InvalidResource | FollowedResource> {
+        let result: ur.UniformResource | ur.InvalidResource | FollowedResource = resource;
         const visitResults = await f.follow(resource.uri);
         if (visitResults.length > 0) {
             const last = visitResults[visitResults.length - 1];
-            if (f.isTerminalContentResult(last)) {
+            if (f.isTerminalResult(last)) {
                 result = {
                     isTransformedResource: true,
                     ...resource,
@@ -68,8 +73,16 @@ export class FollowRedirectsGranular implements ur.UniformResourceTransformer {
                     isFollowedResource: true,
                     followResults: visitResults,
                     uri: last.url,
-                    content: new c.TypicalQueryableHtmlContent(last.content)
+                    content: f.isTerminalTextContentResult(last) ? new c.TypicalQueryableHtmlContent(last.content) : undefined,
+                    terminalResult: last
                 };
+            } else if (f.isVisitError(last)) {
+                result = {
+                    isInvalidResource: true,
+                    ...resource,
+                    error: last.error,
+                    remarks: last.error.message
+                }
             }
         }
         return result;
