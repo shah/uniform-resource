@@ -24,6 +24,10 @@ export interface UniformResourceProvenance {
     readonly originURN: UniformResourceName;
 }
 
+// NOTE: for all UniformResource and related interfaces be careful using functions
+// (unless the functions are properties) because the spread operator is used for copying
+// of resource contents often (especially in transfomers).
+
 export interface UniformResource {
     readonly isUniformResource: true;
     readonly provenance: UniformResourceProvenance;

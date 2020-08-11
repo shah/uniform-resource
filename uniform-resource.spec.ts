@@ -1,5 +1,6 @@
-import { Expect, Test, TestCase, TestFixture, Timeout, IgnoreTest } from "alsatian";
+import { Expect, Test, TestCase, TestFixture, Timeout } from "alsatian";
 import * as fs from "fs";
+import * as c from "./content";
 import * as filters from "./filters";
 import * as follow from "./follow-urls";
 import * as s from "./suppliers";
@@ -52,7 +53,8 @@ export class TestSuite {
         const supplier = new s.TypicalResourcesSupplier({
             originURN: `test`,
             transformer: tr.transformationPipe(
-                tr.FollowRedirectsGranular.singleton)
+                tr.FollowRedirectsGranular.singleton,
+                tr.AcquireQueryableContent.singleton)
         })
         const ctx: ur.UniformResourceContext = {
             isUniformResourceContext: true
@@ -64,16 +66,21 @@ export class TestSuite {
             Expect(resource.followResults.length).toBe(5);
             Expect(follow.isTerminalTextContentResult(resource.terminalResult)).toBe(true);
             Expect(resource.uri).toBe("https://www.foxnews.com/lifestyle/photo-of-donald-trump-look-alike-in-spain-goes-viral");
-            if (follow.isTerminalTextContentResult(resource.terminalResult)) {
-                Expect(resource.terminalResult.mimeType.essence).toBe("text/html");
-                Expect(resource.content.title).toBe("Photo of Donald Trump 'look-alike' in Spain goes viral");
-                Expect(resource.content.socialGraph).toBeDefined();
-                if (resource.content.socialGraph) {
-                    const sg = resource.content.socialGraph;
-                    Expect(sg.openGraph).toBeDefined();
-                    Expect(sg.openGraph?.type).toBe("article");
-                    Expect(sg.openGraph?.title).toBe("Photo of Donald Trump 'look-alike' in Spain goes viral");
-                }
+        }
+        Expect(c.isGovernedContent(resource)).toBe(true);
+        if (c.isGovernedContent(resource)) {
+            Expect(resource.contentType).toBe("text/html; charset=utf-8");
+            Expect(resource.mimeType.essence).toBe("text/html");
+        }
+        Expect(ur.isUniformResourceContent(resource)).toBe(true);
+        if (ur.isUniformResourceContent(resource)) {
+            Expect(resource.content.title).toBe("Photo of Donald Trump 'look-alike' in Spain goes viral");
+            Expect(resource.content.socialGraph).toBeDefined();
+            if (resource.content.socialGraph) {
+                const sg = resource.content.socialGraph;
+                Expect(sg.openGraph).toBeDefined();
+                Expect(sg.openGraph?.type).toBe("article");
+                Expect(sg.openGraph?.title).toBe("Photo of Donald Trump 'look-alike' in Spain goes viral");
             }
         }
     }

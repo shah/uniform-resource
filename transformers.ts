@@ -45,7 +45,7 @@ export class RemoveTrackingCodesFromUrl implements ur.UniformResourceTransformer
     }
 }
 
-export interface FollowedResource extends ur.TransformedResource, ur.UniformResourceContent {
+export interface FollowedResource extends ur.TransformedResource {
     readonly isFollowedResource: true;
     readonly terminalResult: f.VisitResult;
     readonly followResults: f.VisitResult[];
@@ -73,8 +73,6 @@ export class FollowRedirectsGranular implements ur.UniformResourceTransformer {
                     isFollowedResource: true,
                     followResults: visitResults,
                     uri: last.url,
-                    isUniformResourceContent: true,
-                    content: f.isTerminalTextContentResult(last) ? new c.TypicalQueryableHtmlContent(last.content) : undefined,
                     terminalResult: last
                 };
             } else if (f.isVisitError(last)) {
@@ -85,6 +83,25 @@ export class FollowRedirectsGranular implements ur.UniformResourceTransformer {
                     remarks: last.error.message
                 }
             }
+        }
+        return result;
+    }
+}
+
+export class AcquireQueryableContent implements ur.UniformResourceTransformer {
+    static readonly singleton = new AcquireQueryableContent();
+
+    async transform(ctx: ur.UniformResourceContext, resource: ur.UniformResource): Promise<ur.UniformResource | (ur.UniformResource & ur.UniformResourceContent & c.GovernedContent)> {
+        let result: ur.UniformResource | (ur.UniformResource & ur.UniformResourceContent & c.GovernedContent) = resource;
+        if (isFollowedResource(resource) && f.isTerminalTextContentResult(resource.terminalResult)) {
+            const textResult = resource.terminalResult;
+            result = {
+                isUniformResourceContent: true,
+                ...resource,
+                content: new c.TypicalQueryableHtmlContent(textResult.content),
+                contentType: textResult.contentType,
+                mimeType: textResult.mimeType
+            };
         }
         return result;
     }

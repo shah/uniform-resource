@@ -1,7 +1,17 @@
 import cheerio from "cheerio";
+import mime from "whatwg-mimetype";
 
 export type ContentTitle = string;
 export type ContentAbstract = string;
+
+export interface GovernedContent {
+    readonly contentType: string;
+    readonly mimeType: mime;
+}
+
+export function isGovernedContent(o: any): o is GovernedContent {
+    return o && ("contentType" in o) && ("mimeType" in o);
+}
 
 export interface QueryableContent {
     readonly isQueryableContent: true;
