@@ -148,8 +148,8 @@ export async function follow(originalURL: string, options = TypicalFollowOptions
     const visits: VisitResult[] = [];
     let url: string | undefined | null = originalURL;
     let position = 1;
-    let keepGoing = true;
-    while (keepGoing) {
+    let continueVisiting = true;
+    while (continueVisiting) {
         if (position > options.maxRedirectDepth) {
             throw `Exceeded max redirect depth of ${options.maxRedirectDepth}`
         }
@@ -158,13 +158,13 @@ export async function follow(originalURL: string, options = TypicalFollowOptions
             position++;
             visits.push(visitResult);
             if (isRedirectResult(visitResult)) {
-                keepGoing = true;
+                continueVisiting = true;
                 url = visitResult.redirectUrl;
             } else {
-                keepGoing = false;
+                continueVisiting = false;
             }
         } catch (err) {
-            keepGoing = false;
+            continueVisiting = false;
             visits.push({ url: url!, error: err } as VisitError);
         }
     }
