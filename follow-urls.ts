@@ -40,7 +40,7 @@ export function isHttpRedirectResult(o: VisitResult): o is HttpRedirectResult {
 
 export interface ContentRedirectResult extends VisitSuccess {
     readonly metaRefreshRedirect: boolean;
-    readonly content: string;
+    readonly contentText?: string;
     readonly contentType: string;
     readonly mimeType: mime;
 }
@@ -61,7 +61,7 @@ export function isTerminalResult(o: VisitResult): o is TerminalResult {
 
 export interface TerminalTextContentResult extends TerminalResult {
     readonly terminalTextContentResult: boolean;
-    readonly content: string;
+    readonly contentText: string;
 }
 
 export function isTerminalTextContentResult(o: VisitResult): o is TerminalTextContentResult {
@@ -74,6 +74,7 @@ export interface FollowOptions {
     readonly userAgent: UserAgent;
     readonly maxRedirectDepth: number;
     readonly fetchTimeOut: number;
+    readonly cacheContentRedirectText: boolean;
     prepareUrlForFetch?(originalURL: string, position: number): string;
     extractMetaRefreshUrl(html: string): string | null;
     isRedirect(status: number): boolean;
@@ -107,8 +108,8 @@ async function visit(originalURL: string, position: number, options: FollowOptio
             const text = await response.text();
             const redirectUrl = options.extractMetaRefreshUrl(text);
             return redirectUrl ?
-                { url: url, metaRefreshRedirect: true, httpStatus: response.status, redirectUrl: redirectUrl, content: text, httpHeaders: response.headers, contentType: contentType, mimeType: mimeType } :
-                { url: url, httpStatus: response.status, terminalResult: true, terminalTextContentResult: true, content: text, httpHeaders: response.headers, contentType: contentType, mimeType: mimeType }
+                { url: url, metaRefreshRedirect: true, httpStatus: response.status, redirectUrl: redirectUrl, contentText: options.cacheContentRedirectText ? text : undefined, httpHeaders: response.headers, contentType: contentType, mimeType: mimeType } :
+                { url: url, httpStatus: response.status, terminalResult: true, terminalTextContentResult: true, contentText: text, httpHeaders: response.headers, contentType: contentType, mimeType: mimeType }
         }
     }
     return { url: url, httpStatus: response.status, httpHeaders: response.headers, terminalResult: true, contentType: contentType, mimeType: mimeType }
@@ -119,11 +120,13 @@ export class TypicalFollowOptions implements FollowOptions {
     readonly userAgent: UserAgent;
     readonly maxRedirectDepth: number;
     readonly fetchTimeOut: number;
+    readonly cacheContentRedirectText: boolean;
 
-    constructor({ userAgent, maxRedirectDepth, fetchTimeOut }: Partial<FollowOptions>) {
+    constructor({ userAgent, maxRedirectDepth, fetchTimeOut, cacheContentRedirectText }: Partial<FollowOptions>) {
         this.userAgent = userAgent || new UserAgent();
         this.maxRedirectDepth = typeof maxRedirectDepth === "undefined" ? 10 : maxRedirectDepth;
         this.fetchTimeOut = typeof fetchTimeOut === "undefined" ? 2500 : fetchTimeOut;
+        this.cacheContentRedirectText = typeof cacheContentRedirectText === "undefined" ? false : cacheContentRedirectText;
     }
 
     prepareUrlForFetch(url: string): string {

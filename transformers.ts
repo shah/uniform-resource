@@ -98,7 +98,7 @@ export class AcquireQueryableContent implements ur.UniformResourceTransformer {
             result = {
                 isUniformResourceContent: true,
                 ...resource,
-                content: new c.TypicalQueryableHtmlContent(textResult.content),
+                content: new c.TypicalQueryableHtmlContent(textResult.contentText),
                 contentType: textResult.contentType,
                 mimeType: textResult.mimeType
             };

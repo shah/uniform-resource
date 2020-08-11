@@ -31,7 +31,7 @@ export class TestSuite {
         if (f.isTerminalTextContentResult(finalResult)) {
             Expect(finalResult.url).toBe("https://www.foxnews.com/lifestyle/photo-of-donald-trump-look-alike-in-spain-goes-viral");
             Expect(finalResult.httpHeaders.get("Content-Type")).toBe("text/html; charset=utf-8");
-            Expect(finalResult.content).toBeDefined();
+            Expect(finalResult.contentText).toBeDefined();
         }
     }
 }

@@ -45,6 +45,12 @@ export function isUniformResourceContent(o: any): o is UniformResourceContent {
     return o && "isUniformResourceContent" in o;
 }
 
+export interface InvalidResource extends UniformResource {
+    readonly isInvalidResource: true;
+    readonly error: Error;
+    readonly remarks?: string;
+}
+
 export interface TransformedResource extends UniformResource {
     readonly isTransformedResource: true;
     readonly transformedFromUR: UniformResource;
@@ -54,12 +60,6 @@ export interface TransformedResource extends UniformResource {
 
 export function isTransformedResource(o: any): o is TransformedResource {
     return o && "isTransformedResource" in o;
-}
-
-export interface InvalidResource extends UniformResource {
-    readonly isInvalidResource: true;
-    readonly error: Error;
-    readonly remarks?: string;
 }
 
 export function isInvalidResource(o: any): o is InvalidResource {
