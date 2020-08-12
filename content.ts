@@ -1,6 +1,7 @@
 import cheerio from "cheerio";
 import mime from "whatwg-mimetype";
 
+export type ContentBody = string;
 export type ContentTitle = string;
 export type ContentAbstract = string;
 
@@ -13,10 +14,14 @@ export function isGovernedContent(o: any): o is GovernedContent {
     return o && ("contentType" in o) && ("mimeType" in o);
 }
 
-export interface QueryableContent {
-    readonly isQueryableContent: true;
+export interface CuratableContent {
+    readonly isCuratableContent: true;
     readonly title?: ContentTitle;
     readonly socialGraph?: SocialGraph;
+}
+
+export function isCuratableContent(o: any): o is CuratableContent {
+    return o && "isCuratableContent" in o;
 }
 
 export interface AnchorFilter {
@@ -43,8 +48,9 @@ export interface SocialGraph {
     readonly twitter?: Readonly<TwitterCard>;
 }
 
-export interface QueryableHtmlContent extends QueryableContent {
+export interface QueryableHtmlContent extends CuratableContent {
     readonly isQueryableHtmlContent: true;
+    readonly htmlSource: string;
     readonly title: ContentTitle;
     readonly socialGraph: SocialGraph;
     anchors(retain?: AnchorFilter): HtmlAnchor[];
@@ -77,7 +83,7 @@ export function typicalTitleCleanser(suggested: ContentTitle, htmlContent: Cheer
 }
 
 export class TypicalQueryableHtmlContent implements QueryableHtmlContent {
-    readonly isQueryableContent = true;
+    readonly isCuratableContent = true;
     readonly isQueryableHtmlContent = true;
     readonly htmlContent: CheerioStatic;
     readonly title: ContentTitle;

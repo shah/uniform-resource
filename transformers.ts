@@ -1,7 +1,7 @@
+import { Cache, lruCache } from "./cache";
 import * as c from "./content";
 import * as f from "./follow-urls";
 import * as ur from "./uniform-resource";
-import { Cache, lruCache } from "./cache";
 
 export class RemoveLabelLineBreaksAndTrimSpaces implements ur.UniformResourceTransformer {
     static readonly singleton = new RemoveLabelLineBreaksAndTrimSpaces();
@@ -96,20 +96,108 @@ export class FollowRedirectsGranular implements ur.UniformResourceTransformer {
     }
 }
 
-export class AcquireQueryableContent implements ur.UniformResourceTransformer {
-    static readonly singleton = new AcquireQueryableContent();
+export class EnrichGovernedContent implements ur.UniformResourceTransformer {
+    static readonly singleton = new EnrichGovernedContent();
 
-    async transform(ctx: ur.UniformResourceContext, resource: ur.UniformResource): Promise<ur.UniformResource | (ur.UniformResource & ur.UniformResourceContent & c.GovernedContent)> {
-        let result: ur.UniformResource | (ur.UniformResource & ur.UniformResourceContent & c.GovernedContent) = resource;
+    async transform(ctx: ur.UniformResourceContext, resource: ur.UniformResource): Promise<ur.UniformResource | (ur.UniformResource & c.GovernedContent)> {
+        let result: ur.UniformResource | (ur.UniformResource & c.GovernedContent) = resource;
         if (isFollowedResource(resource) && f.isTerminalTextContentResult(resource.terminalResult)) {
             const textResult = resource.terminalResult;
             result = {
-                isUniformResourceContent: true,
+                ...resource,
+                contentType: textResult.contentType,
+                mimeType: textResult.mimeType
+            };
+        }
+        return result;
+    }
+}
+
+export interface QueryableHtmlContentResource extends FollowedResource, c.GovernedContent {
+    readonly isQueryableHtmlContentResource: true;
+    readonly content: c.QueryableHtmlContent;
+}
+
+export function isQueryableHtmlContentResource(o: any): o is QueryableHtmlContentResource {
+    return o && "isQueryableHtmlContentResource" in o;
+}
+
+export class EnrichQueryableHtmlContent implements ur.UniformResourceTransformer {
+    static readonly singleton = new EnrichQueryableHtmlContent();
+
+    async transform(ctx: ur.UniformResourceContext, resource: ur.UniformResource): Promise<ur.UniformResource | QueryableHtmlContentResource> {
+        let result: ur.UniformResource | QueryableHtmlContentResource = resource;
+        if (isFollowedResource(resource) && f.isTerminalTextContentResult(resource.terminalResult)) {
+            const textResult = resource.terminalResult;
+            result = {
+                isQueryableHtmlContentResource: true,
                 ...resource,
                 content: new c.TypicalQueryableHtmlContent(textResult.contentText),
                 contentType: textResult.contentType,
                 mimeType: textResult.mimeType
             };
+        }
+        return result;
+    }
+}
+
+export interface ReadableContentAsyncSupplier {
+    (): Promise<{ [key: string]: any }>;
+}
+
+export interface ReadableContentSupplier {
+    (): { [key: string]: any };
+}
+
+export interface ReadableContentResource extends FollowedResource, c.GovernedContent {
+    readonly isReadableContentResource: true;
+    readonly mercuryReadable: ReadableContentAsyncSupplier;
+    readonly mozillaReadable: ReadableContentSupplier;
+}
+
+export function isReadableContentResource(o: any): o is ReadableContentResource {
+    return o && "isReadableContentResource" in o;
+}
+
+export class EnrichReadableContent implements ur.UniformResourceTransformer {
+    static readonly singleton = new EnrichReadableContent();
+
+    async transform(ctx: ur.UniformResourceContext, resource: ur.UniformResource): Promise<ur.UniformResource | ReadableContentResource | (ReadableContentResource & QueryableHtmlContentResource)> {
+        let result: ur.UniformResource | ReadableContentResource | (ReadableContentResource & QueryableHtmlContentResource) = resource;
+        if (isQueryableHtmlContentResource(resource)) {
+            return {
+                isReadableContentResource: true,
+                ...resource,
+                mercuryReadable: async (): Promise<{ [key: string]: any }> => {
+                    const Mercury = require('@postlight/mercury-parser');
+                    return await Mercury.parse(resource.uri, { html: resource.content.htmlSource });
+                },
+                mozillaReadable: (): { [key: string]: any } => {
+                    const { Readability } = require('@mozilla/readability');
+                    const { JSDOM } = require('jsdom');
+                    const jd = new JSDOM(resource.content.htmlSource, { url: resource.uri })
+                    const reader = new Readability(jd.window.document);
+                    return reader.parse();
+                }
+            }
+        }
+        if (isFollowedResource(resource) && f.isTerminalTextContentResult(resource.terminalResult)) {
+            const textResult = resource.terminalResult;
+            return {
+                isReadableContentResource: true,
+                ...resource,
+                mercuryReadable: async (): Promise<{ [key: string]: any }> => {
+                    const Mercury = require('@postlight/mercury-parser');
+                    return await Mercury.parse(resource.uri, { html: textResult.contentText });
+                },
+                mozillaReadable: (): { [key: string]: any } => {
+                    const { Readability } = require('@mozilla/readability');
+                    const { JSDOM } = require('jsdom');
+                    const jd = new JSDOM(textResult.contentText, { url: resource.uri })
+                    const reader = new Readability(jd.window.document);
+                    return reader.parse();
+                }
+            }
         }
         return result;
     }

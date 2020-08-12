@@ -36,15 +36,6 @@ export interface UniformResource {
     readonly label?: UniformResourceLabel;
 }
 
-export interface UniformResourceContent {
-    readonly isUniformResourceContent: true;
-    readonly content: c.QueryableContent;
-}
-
-export function isUniformResourceContent(o: any): o is UniformResourceContent {
-    return o && "isUniformResourceContent" in o;
-}
-
 export interface InvalidResource extends UniformResource {
     readonly isInvalidResource: true;
     readonly error: Error;

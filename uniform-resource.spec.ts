@@ -1,6 +1,6 @@
-import { Expect, Test, TestCase, TestFixture, Timeout, IgnoreTest } from "alsatian";
-import { lruCache, Cache } from "./cache";
+import { Expect, Test, TestCase, TestFixture, Timeout } from "alsatian";
 import * as fs from "fs";
+import { Cache, lruCache } from "./cache";
 import * as c from "./content";
 import * as filters from "./filters";
 import * as follow from "./follow-urls";
@@ -20,7 +20,8 @@ export class TestSuite {
             originURN: `test`,
             transformer: tr.transformationPipe(
                 new tr.FollowRedirectsGranular(this.redirectVisitsCache),
-                tr.AcquireQueryableContent.singleton),
+                tr.EnrichQueryableHtmlContent.singleton,
+                tr.EnrichReadableContent.singleton),
         });
         this.ctx = {
             isUniformResourceContext: true
@@ -30,7 +31,7 @@ export class TestSuite {
     @TestCase("provenance-email-base64.spec.txt")
     @Test("Base 64 Encoded E-mail Body")
     @Timeout(30000)
-    @IgnoreTest("Temporary, this takes time to run")
+    //@IgnoreTest("Temporary, this takes time to run")
     async testBase64EncodedEmail(base64EncodedHtmlFileName: string): Promise<void> {
         const base64Content = fs.readFileSync(base64EncodedHtmlFileName);
         Expect(base64Content).toBeDefined();
@@ -95,8 +96,8 @@ export class TestSuite {
     async testSingleValidResourceContent(): Promise<void> {
         const resource = await this.typicalSupplier.resourceFromAnchor(this.ctx, { href: "https://t.co/ELrZmo81wI" });
         Expect(resource).toBeDefined();
-        Expect(ur.isUniformResourceContent(resource)).toBe(true);
-        if (ur.isUniformResourceContent(resource)) {
+        Expect(tr.isQueryableHtmlContentResource(resource)).toBe(true);
+        if (tr.isQueryableHtmlContentResource(resource)) {
             Expect(resource.content.title).toBe("Photo of Donald Trump 'look-alike' in Spain goes viral");
             Expect(resource.content.socialGraph).toBeDefined();
             if (resource.content.socialGraph) {
@@ -105,6 +106,18 @@ export class TestSuite {
                 Expect(sg.openGraph?.type).toBe("article");
                 Expect(sg.openGraph?.title).toBe(resource.content.title);
             }
+        }
+    }
+
+    @Timeout(10000)
+    @Test("Test a single, valid, ReadableContent")
+    async testSingleValidReadableContent(): Promise<void> {
+        const resource = await this.typicalSupplier.resourceFromAnchor(this.ctx, { href: "https://t.co/ELrZmo81wI" });
+        Expect(resource).toBeDefined();
+        Expect(tr.isReadableContentResource(resource)).toBe(true);
+        if (tr.isReadableContentResource(resource)) {
+            Expect(await resource.mercuryReadable()).toBeDefined();
+            Expect(resource.mozillaReadable()).toBeDefined();
         }
     }
 
@@ -123,7 +136,7 @@ export class TestSuite {
         }
     }
 
-    @Timeout(30000)
+    @Timeout(10000)
     @Test("Test a single, badly formed URL")
     async testSingleInvalidURL(): Promise<void> {
         const resource = await this.typicalSupplier.resourceFromAnchor(this.ctx, { href: "https://t" });
