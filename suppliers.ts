@@ -1,23 +1,25 @@
 import * as c from "./content";
+import * as fl from "./filters";
+import * as tr from "./transformers";
 import * as ur from "./uniform-resource";
 
 export interface TypicalSupplierOptions {
     readonly originURN: ur.UniformResourceName;
-    readonly filter?: ur.UniformResourceFilter;
-    readonly transformer?: ur.UniformResourceTransformer;
+    readonly filter?: fl.UniformResourceFilter;
+    readonly unifResourceTr?: tr.UniformResourceTransformer;
 }
 
 export class TypicalResourcesSupplier implements ur.UniformResourceProvenance, ur.UniformResourcesSupplier {
     readonly isUniformResourceSupplier = true;
     readonly isUniformResourceProvenance = true;
     readonly originURN: ur.UniformResourceName;
-    readonly filter?: ur.UniformResourceFilter;
-    readonly transformer?: ur.UniformResourceTransformer;
+    readonly filter?: fl.UniformResourceFilter;
+    readonly unifResourceTr?: tr.UniformResourceTransformer;
 
-    constructor({ originURN, filter, transformer }: TypicalSupplierOptions) {
+    constructor({ originURN, filter, unifResourceTr: transformer }: TypicalSupplierOptions) {
         this.originURN = originURN;
         this.filter = filter;
-        this.transformer = transformer;
+        this.unifResourceTr = transformer;
     }
 
     async resourceFromAnchor(ctx: ur.UniformResourceContext, anchor: c.HtmlAnchor): Promise<ur.UniformResource | undefined> {
@@ -32,8 +34,8 @@ export class TypicalResourcesSupplier implements ur.UniformResourceProvenance, u
                 return undefined;
             }
         }
-        if (this.transformer) {
-            const transformed = await this.transformer.transform(ctx, original);
+        if (this.unifResourceTr) {
+            const transformed = await this.unifResourceTr.transform(ctx, original);
             if (this.filter && this.filter.retainTransformed) {
                 if (!this.filter.retainTransformed(transformed)) {
                     return undefined;
@@ -47,19 +49,15 @@ export class TypicalResourcesSupplier implements ur.UniformResourceProvenance, u
 }
 
 export interface HtmlContentSupplierOptions extends TypicalSupplierOptions {
-    readonly htmlSource: string;
 }
 
 export class HtmlContentResourcesSupplier extends TypicalResourcesSupplier {
-    readonly content: c.QueryableHtmlContent;
-
-    constructor({ originURN, htmlSource, filter, transformer }: HtmlContentSupplierOptions) {
-        super({ originURN, filter, transformer });
-        this.content = new c.TypicalQueryableHtmlContent(htmlSource);
+    constructor(readonly htmlContent: c.QueryableHtmlContent, readonly options: HtmlContentSupplierOptions) {
+        super(options);
     }
 
     async forEachResource(ctx: ur.UniformResourceContext, consume: ur.UniformResourceConsumer): Promise<void> {
-        const anchors = this.content.anchors();
+        const anchors = this.htmlContent.anchors();
         for (const anchor of anchors) {
             const ur = await this.resourceFromAnchor(ctx, anchor);
             if (ur) consume(ur);

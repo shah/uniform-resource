@@ -3,10 +3,38 @@ import * as c from "./content";
 import * as f from "./follow-urls";
 import * as ur from "./uniform-resource";
 
-export class RemoveLabelLineBreaksAndTrimSpaces implements ur.UniformResourceTransformer {
+export interface TransformedResource extends ur.UniformResource {
+    readonly transformedFromUR: ur.UniformResource;
+    readonly pipePosition: number;
+    readonly remarks?: string;
+}
+
+export function isTransformedResource(o: any): o is TransformedResource {
+    return o && "transformedFromUR" in o && "pipePosition" in o;
+}
+
+export function nextTransformationPipePosition(o: any): number {
+    return "pipePosition" in o ? o.pipePosition + 1 : 0;
+}
+
+export function allTransformationRemarks(tr: TransformedResource): string[] {
+    const result: string[] = [];
+    let active: ur.UniformResource = tr;
+    while (isTransformedResource(active)) {
+        result.unshift(active.remarks || "(no remarks)");
+        active = active.transformedFromUR;
+    }
+    return result;
+}
+
+export interface UniformResourceTransformer {
+    transform(ctx: ur.UniformResourceContext, resource: ur.UniformResource): Promise<ur.UniformResource>;
+}
+
+export class RemoveLabelLineBreaksAndTrimSpaces implements UniformResourceTransformer {
     static readonly singleton = new RemoveLabelLineBreaksAndTrimSpaces();
 
-    async transform(ctx: ur.UniformResourceContext, resource: ur.UniformResource): Promise<ur.UniformResource | ur.TransformedResource> {
+    async transform(ctx: ur.UniformResourceContext, resource: ur.UniformResource): Promise<ur.UniformResource | TransformedResource> {
         if (!resource.label) {
             return resource;
         }
@@ -14,9 +42,8 @@ export class RemoveLabelLineBreaksAndTrimSpaces implements ur.UniformResourceTra
         const cleanLabel = resource.label.replace(/\r\n|\n|\r/gm, " ").trim()
         if (cleanLabel != resource.label) {
             return {
-                isTransformedResource: true,
                 ...resource,
-                pipePosition: ur.nextTransformationPipePosition(resource),
+                pipePosition: nextTransformationPipePosition(resource),
                 transformedFromUR: resource,
                 label: cleanLabel,
                 remarks: "Removed line breaks and trimmed spaces in label"
@@ -26,16 +53,15 @@ export class RemoveLabelLineBreaksAndTrimSpaces implements ur.UniformResourceTra
     }
 }
 
-export class RemoveTrackingCodesFromUrl implements ur.UniformResourceTransformer {
+export class RemoveTrackingCodesFromUrl implements UniformResourceTransformer {
     static readonly singleton = new RemoveTrackingCodesFromUrl();
 
-    async transform(ctx: ur.UniformResourceContext, resource: ur.UniformResource): Promise<ur.UniformResource | ur.TransformedResource> {
+    async transform(ctx: ur.UniformResourceContext, resource: ur.UniformResource): Promise<ur.UniformResource | TransformedResource> {
         const cleanedURI = resource.uri.replace(/(?<=&|\?)utm_.*?(&|$)/igm, "");
         if (cleanedURI != resource.uri) {
-            const transformed: ur.TransformedResource = {
-                isTransformedResource: true,
+            const transformed: TransformedResource = {
                 ...resource,
-                pipePosition: ur.nextTransformationPipePosition(resource),
+                pipePosition: nextTransformationPipePosition(resource),
                 transformedFromUR: resource,
                 remarks: "Removed utm_* tracking parameters from URL",
             }
@@ -46,7 +72,7 @@ export class RemoveTrackingCodesFromUrl implements ur.UniformResourceTransformer
     }
 }
 
-export interface FollowedResource extends ur.TransformedResource {
+export interface FollowedResource extends TransformedResource {
     readonly isFollowedResource: true;
     readonly terminalResult: f.VisitResult;
     readonly followResults: f.VisitResult[];
@@ -56,7 +82,7 @@ export function isFollowedResource(o: any): o is FollowedResource {
     return o && "isFollowedResource" in o;
 }
 
-export class FollowRedirectsGranular implements ur.UniformResourceTransformer {
+export class FollowRedirectsGranular implements UniformResourceTransformer {
     static readonly singleton = new FollowRedirectsGranular();
 
     constructor(readonly cache: Cache<f.VisitResult[]> = lruCache()) {
@@ -73,9 +99,8 @@ export class FollowRedirectsGranular implements ur.UniformResourceTransformer {
             const last = visitResults[visitResults.length - 1];
             if (f.isTerminalResult(last)) {
                 result = {
-                    isTransformedResource: true,
                     ...resource,
-                    pipePosition: ur.nextTransformationPipePosition(resource),
+                    pipePosition: nextTransformationPipePosition(resource),
                     transformedFromUR: resource,
                     remarks: "Followed, with " + visitResults.length + " results",
                     isFollowedResource: true,
@@ -96,7 +121,7 @@ export class FollowRedirectsGranular implements ur.UniformResourceTransformer {
     }
 }
 
-export class EnrichGovernedContent implements ur.UniformResourceTransformer {
+export class EnrichGovernedContent implements UniformResourceTransformer {
     static readonly singleton = new EnrichGovernedContent();
 
     async transform(ctx: ur.UniformResourceContext, resource: ur.UniformResource): Promise<ur.UniformResource | (ur.UniformResource & c.GovernedContent)> {
@@ -113,113 +138,64 @@ export class EnrichGovernedContent implements ur.UniformResourceTransformer {
     }
 }
 
-export interface QueryableHtmlContentResource extends FollowedResource, c.GovernedContent {
-    readonly isQueryableHtmlContentResource: true;
-    readonly content: c.QueryableHtmlContent;
+export interface CuratableContentResource extends ur.UniformResource {
+    readonly curatableContent: c.CuratableContent;
 }
 
-export function isQueryableHtmlContentResource(o: any): o is QueryableHtmlContentResource {
-    return o && "isQueryableHtmlContentResource" in o;
+export function isCuratableContentResource(o: any): o is CuratableContentResource {
+    return o && ("curatableContent" in o);
 }
 
-export class EnrichQueryableHtmlContent implements ur.UniformResourceTransformer {
-    static readonly singleton = new EnrichQueryableHtmlContent();
+export class EnrichCuratableContent implements UniformResourceTransformer {
+    static readonly standard = new EnrichCuratableContent(c.contentTransformationPipe(
+        c.EnrichCuratableContent.singleton,
+        c.StandardizeCurationTitle.singleton));
+    static readonly readable = new EnrichCuratableContent(c.contentTransformationPipe(
+        c.EnrichCuratableContent.singleton,
+        c.StandardizeCurationTitle.singleton,
+        c.EnrichMercuryReadableContent.singleton,
+        c.EnrichMozillaReadabilityContent.singleton));
 
-    async transform(ctx: ur.UniformResourceContext, resource: ur.UniformResource): Promise<ur.UniformResource | QueryableHtmlContentResource> {
-        let result: ur.UniformResource | QueryableHtmlContentResource = resource;
+    constructor(readonly contentTr: c.ContentTransformer) {
+    }
+
+    async transform(ctx: ur.UniformResourceContext, resource: ur.UniformResource): Promise<ur.UniformResource | CuratableContentResource> {
+        let result: ur.UniformResource | CuratableContentResource = resource;
         if (isFollowedResource(resource) && f.isTerminalTextContentResult(resource.terminalResult)) {
             const textResult = resource.terminalResult;
-            result = {
-                isQueryableHtmlContentResource: true,
-                ...resource,
-                content: new c.TypicalQueryableHtmlContent(textResult.contentText),
+            const content = await this.contentTr.transform({
+                uri: resource.uri,
+                htmlSource: textResult.contentText
+            }, {
                 contentType: textResult.contentType,
                 mimeType: textResult.mimeType
+            });
+            result = {
+                ...resource,
+                curatableContent: content as c.CuratableContent,
             };
         }
         return result;
     }
 }
 
-export interface ReadableContentAsyncSupplier {
-    (): Promise<{ [key: string]: any }>;
-}
-
-export interface ReadableContentSupplier {
-    (): { [key: string]: any };
-}
-
-export interface ReadableContentResource extends FollowedResource, c.GovernedContent {
-    readonly isReadableContentResource: true;
-    readonly mercuryReadable: ReadableContentAsyncSupplier;
-    readonly mozillaReadable: ReadableContentSupplier;
-}
-
-export function isReadableContentResource(o: any): o is ReadableContentResource {
-    return o && "isReadableContentResource" in o;
-}
-
-export class EnrichReadableContent implements ur.UniformResourceTransformer {
-    static readonly singleton = new EnrichReadableContent();
-
-    async transform(ctx: ur.UniformResourceContext, resource: ur.UniformResource): Promise<ur.UniformResource | ReadableContentResource | (ReadableContentResource & QueryableHtmlContentResource)> {
-        let result: ur.UniformResource | ReadableContentResource | (ReadableContentResource & QueryableHtmlContentResource) = resource;
-        if (isQueryableHtmlContentResource(resource)) {
-            return {
-                isReadableContentResource: true,
-                ...resource,
-                mercuryReadable: async (): Promise<{ [key: string]: any }> => {
-                    const Mercury = require('@postlight/mercury-parser');
-                    return await Mercury.parse(resource.uri, { html: resource.content.htmlSource });
-                },
-                mozillaReadable: (): { [key: string]: any } => {
-                    const { Readability } = require('@mozilla/readability');
-                    const { JSDOM } = require('jsdom');
-                    const jd = new JSDOM(resource.content.htmlSource, { url: resource.uri })
-                    const reader = new Readability(jd.window.document);
-                    return reader.parse();
-                }
-            }
-        }
-        if (isFollowedResource(resource) && f.isTerminalTextContentResult(resource.terminalResult)) {
-            const textResult = resource.terminalResult;
-            return {
-                isReadableContentResource: true,
-                ...resource,
-                mercuryReadable: async (): Promise<{ [key: string]: any }> => {
-                    const Mercury = require('@postlight/mercury-parser');
-                    return await Mercury.parse(resource.uri, { html: textResult.contentText });
-                },
-                mozillaReadable: (): { [key: string]: any } => {
-                    const { Readability } = require('@mozilla/readability');
-                    const { JSDOM } = require('jsdom');
-                    const jd = new JSDOM(textResult.contentText, { url: resource.uri })
-                    const reader = new Readability(jd.window.document);
-                    return reader.parse();
-                }
-            }
-        }
-        return result;
-    }
-}
-
-export function transformationPipe(...chain: ur.UniformResourceTransformer[]): ur.UniformResourceTransformer {
+export function transformationPipe(...chain: UniformResourceTransformer[]): UniformResourceTransformer {
     if (chain.length == 0) {
-        return new class implements ur.UniformResourceTransformer {
+        return new class implements UniformResourceTransformer {
             async transform(ctx: ur.UniformResourceContext, resource: ur.UniformResource): Promise<ur.UniformResource> {
                 return resource;
             }
         }()
     }
     if (chain.length == 1) {
-        return new class implements ur.UniformResourceTransformer {
-            async transform(ctx: ur.UniformResourceContext, resource: ur.UniformResource): Promise<ur.UniformResource | ur.TransformedResource> {
+        return new class implements UniformResourceTransformer {
+            async transform(ctx: ur.UniformResourceContext, resource: ur.UniformResource): Promise<ur.UniformResource> {
                 return await chain[0].transform(ctx, resource);
             }
         }()
     }
-    return new class implements ur.UniformResourceTransformer {
-        async transform(ctx: ur.UniformResourceContext, resource: ur.UniformResource): Promise<ur.UniformResource | ur.TransformedResource> {
+    return new class implements UniformResourceTransformer {
+        async transform(ctx: ur.UniformResourceContext, resource: ur.UniformResource): Promise<ur.UniformResource> {
             let result = await chain[0].transform(ctx, resource);
             for (let i = 1; i < chain.length; i++) {
                 result = await chain[i].transform(ctx, result);

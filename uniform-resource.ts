@@ -19,6 +19,10 @@ export interface UniformResourcesSupplier {
         urc: UniformResourceConsumer): Promise<void>;
 }
 
+export interface UniformResourceConsumer {
+    (resource: UniformResource): void;
+}
+
 export interface UniformResourceProvenance {
     readonly isUniformResourceProvenance: true;
     readonly originURN: UniformResourceName;
@@ -42,61 +46,7 @@ export interface InvalidResource extends UniformResource {
     readonly remarks?: string;
 }
 
-export interface TransformedResource extends UniformResource {
-    readonly isTransformedResource: true;
-    readonly transformedFromUR: UniformResource;
-    readonly pipePosition: number;
-    readonly remarks?: string;
-}
-
-export function isTransformedResource(o: any): o is TransformedResource {
-    return o && "isTransformedResource" in o;
-}
-
 export function isInvalidResource(o: any): o is InvalidResource {
     return o && "isInvalidResource" in o;
 }
 
-export function nextTransformationPipePosition(o: any): number {
-    return isTransformedResource(o) ? o.pipePosition + 1 : 0;
-}
-
-export function allTransformationRemarks(tr: TransformedResource): string[] {
-    const result: string[] = [];
-    let active: UniformResource = tr;
-    while (isTransformedResource(active)) {
-        result.unshift(active.remarks || "(no remarks)");
-        active = active.transformedFromUR;
-    }
-    return result;
-}
-
-export interface UniformResourceFilterReporter {
-    (resource: UniformResource): void;
-}
-
-export interface UniformResourceFilter {
-    retainOriginal?(resource: UniformResource): boolean;
-    retainTransformed?(resource: UniformResource | TransformedResource): boolean;
-}
-
-export interface UniformResourceTransformer {
-    transform(ctx: UniformResourceContext, resource: UniformResource): Promise<UniformResource | TransformedResource>;
-}
-
-export interface UniformResourceFindOptions {
-    readonly originURI?: UniformResourceIdentifier
-}
-
-export interface UniformResourceStore {
-    find(options: UniformResourceFindOptions): UniformResource;
-}
-
-export interface UniformResourceLocation {
-    readonly isUniformResourceLocation: true;
-    readonly url: URL;
-}
-
-export interface UniformResourceConsumer {
-    (resource: UniformResource): void;
-}

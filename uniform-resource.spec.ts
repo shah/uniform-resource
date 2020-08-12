@@ -1,5 +1,6 @@
 import { Expect, Test, TestCase, TestFixture, Timeout } from "alsatian";
 import * as fs from "fs";
+import mime from "whatwg-mimetype";
 import { Cache, lruCache } from "./cache";
 import * as c from "./content";
 import * as filters from "./filters";
@@ -18,10 +19,10 @@ export class TestSuite {
         this.redirectVisitsCache = lruCache();
         this.typicalSupplier = new s.TypicalResourcesSupplier({
             originURN: `test`,
-            transformer: tr.transformationPipe(
+            unifResourceTr: tr.transformationPipe(
                 new tr.FollowRedirectsGranular(this.redirectVisitsCache),
-                tr.EnrichQueryableHtmlContent.singleton,
-                tr.EnrichReadableContent.singleton),
+                tr.EnrichGovernedContent.singleton,
+                tr.EnrichCuratableContent.readable),
         });
         this.ctx = {
             isUniformResourceContext: true
@@ -36,14 +37,22 @@ export class TestSuite {
         const base64Content = fs.readFileSync(base64EncodedHtmlFileName);
         Expect(base64Content).toBeDefined();
 
+        const testURN = `test:${base64EncodedHtmlFileName}`;
         const frc = new filters.FilteredResourcesCounter();
-        const emrs = new s.EmailMessageResourcesSupplier({
-            originURN: `test:${base64EncodedHtmlFileName}`,
-            htmlSource: Buffer.from(base64Content.toString(), 'base64').toString(),
+        const contentTr = c.contentTransformationPipe(c.EnrichQueryableHtmlContent.singleton);
+        const htmlContent = await contentTr.transform({
+            uri: testURN,
+            htmlSource: Buffer.from(base64Content.toString(), 'base64').toString()
+        }, {
+            contentType: "text/html",
+            mimeType: new mime("text/html")
+        }) as c.QueryableHtmlContent;
+        const emrs = new s.EmailMessageResourcesSupplier(htmlContent, {
+            originURN: testURN,
             filter: filters.filterPipe(
                 new filters.BlankLabelFilter(frc.reporter("Blank label")),
                 new filters.BrowserTraversibleFilter(frc.reporter("Not traversible"))),
-            transformer: tr.transformationPipe(
+            unifResourceTr: tr.transformationPipe(
                 tr.RemoveLabelLineBreaksAndTrimSpaces.singleton,
                 tr.FollowRedirectsGranular.singleton,
                 tr.RemoveTrackingCodesFromUrl.singleton)
@@ -55,10 +64,10 @@ export class TestSuite {
         }
         await emrs.forEachResource(ctx, (resource: ur.UniformResource): void => {
             retained.push(resource);
-            if (ur.isTransformedResource(resource)) {
-                //console.log(`[${resource.label}] ${ur.allTransformationRemarks(resource).join(" | ")} (${resource.pipePosition})`, resource.uri);
+            if (tr.isTransformedResource(resource)) {
+                // console.log(`[${resource.label}] ${tr.allTransformationRemarks(resource).join(" | ")} (${resource.pipePosition})`, resource.uri);
             } else {
-                //console.log(`[${resource.label}] no transformations`, resource.uri);
+                // console.log(`[${resource.label}] no transformations`, resource.uri);
             }
         });
         Expect(frc.count("Blank label")).toBe(9);
@@ -96,28 +105,33 @@ export class TestSuite {
     async testSingleValidResourceContent(): Promise<void> {
         const resource = await this.typicalSupplier.resourceFromAnchor(this.ctx, { href: "https://t.co/ELrZmo81wI" });
         Expect(resource).toBeDefined();
-        Expect(tr.isQueryableHtmlContentResource(resource)).toBe(true);
-        if (tr.isQueryableHtmlContentResource(resource)) {
-            Expect(resource.content.title).toBe("Photo of Donald Trump 'look-alike' in Spain goes viral");
-            Expect(resource.content.socialGraph).toBeDefined();
-            if (resource.content.socialGraph) {
-                const sg = resource.content.socialGraph;
+        Expect(tr.isCuratableContentResource(resource)).toBe(true);
+        if (tr.isCuratableContentResource(resource)) {
+            Expect(resource.curatableContent.title).toBe("Photo of Donald Trump 'look-alike' in Spain goes viral");
+            Expect(resource.curatableContent.socialGraph).toBeDefined();
+            if (resource.curatableContent.socialGraph) {
+                const sg = resource.curatableContent.socialGraph;
                 Expect(sg.openGraph).toBeDefined();
                 Expect(sg.openGraph?.type).toBe("article");
-                Expect(sg.openGraph?.title).toBe(resource.content.title);
+                Expect(sg.openGraph?.title).toBe(resource.curatableContent.title);
             }
         }
     }
 
     @Timeout(10000)
-    @Test("Test a single, valid, ReadableContent")
+    @Test("Test a single, valid, readable content resource")
     async testSingleValidReadableContent(): Promise<void> {
         const resource = await this.typicalSupplier.resourceFromAnchor(this.ctx, { href: "https://t.co/ELrZmo81wI" });
         Expect(resource).toBeDefined();
-        Expect(tr.isReadableContentResource(resource)).toBe(true);
-        if (tr.isReadableContentResource(resource)) {
-            Expect(await resource.mercuryReadable()).toBeDefined();
-            Expect(resource.mozillaReadable()).toBeDefined();
+        Expect(tr.isCuratableContentResource(resource)).toBe(true);
+        if (tr.isCuratableContentResource(resource)) {
+            const content = resource.curatableContent;
+            if (c.isMercuryReadableContent(content)) {
+                Expect(await content.mercuryReadable()).toBeDefined();
+            }
+            if (c.isMozillaReadabilityContent(content)) {
+                Expect(content.mozillaReadability()).toBeDefined();
+            }
         }
     }
 

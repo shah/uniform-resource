@@ -14,18 +14,37 @@ export function isGovernedContent(o: any): o is GovernedContent {
     return o && ("contentType" in o) && ("mimeType" in o);
 }
 
-export interface CuratableContent {
-    readonly isCuratableContent: true;
-    readonly title?: ContentTitle;
-    readonly socialGraph?: SocialGraph;
+export interface GovernedContentContext {
+    readonly uri: string;
+    readonly htmlSource: string;
 }
 
-export function isCuratableContent(o: any): o is CuratableContent {
-    return o && "isCuratableContent" in o;
+export interface HtmlAnchor {
+    readonly href: string;
+    readonly label?: string;
 }
 
 export interface AnchorFilter {
     (retain: HtmlAnchor): boolean;
+}
+
+export interface CuratableContent extends GovernedContent {
+    readonly title: ContentTitle;
+    readonly socialGraph: SocialGraph;
+}
+
+export function isCuratableContent(o: any): o is CuratableContent {
+    return o && "title" in o && "socialGraph" in o;
+}
+
+export interface QueryableHtmlContent extends GovernedContent {
+    readonly htmlSource: string;
+    readonly document: CheerioStatic;
+    readonly anchors: (retain?: AnchorFilter) => HtmlAnchor[];
+}
+
+export function isQueryableHtmlContent(o: any): o is QueryableHtmlContent {
+    return o && "htmlSource" in o && "document" in o;
 }
 
 export interface OpenGraph {
@@ -48,65 +67,68 @@ export interface SocialGraph {
     readonly twitter?: Readonly<TwitterCard>;
 }
 
-export interface QueryableHtmlContent extends CuratableContent {
-    readonly isQueryableHtmlContent: true;
-    readonly htmlSource: string;
-    readonly title: ContentTitle;
-    readonly socialGraph: SocialGraph;
-    anchors(retain?: AnchorFilter): HtmlAnchor[];
+export interface TransformedContent extends GovernedContent {
+    readonly transformedFromContent: GovernedContent;
+    readonly pipePosition: number;
+    readonly remarks?: string;
 }
 
-export function isQueryableHtmlContent(o: any): o is QueryableHtmlContent {
-    return o && "isQueryableHtmlContent" in o;
+export function isTransformedContent(o: any): o is TransformedContent {
+    return o && "transformedFromContent" in o;
 }
 
-export interface HtmlAnchor {
-    readonly href: string;
-    readonly label?: string;
+export function nextTransformationPipePosition(o: any): number {
+    return "pipePosition" in o ? o.pipePosition + 1 : 0;
 }
 
-export interface ContentTitleTransformer {
-    (suggested: ContentTitle, htmlContent: CheerioStatic): ContentTitle;
+export interface ContentTransformer {
+    transform(ctx: GovernedContentContext, content: GovernedContent): Promise<GovernedContent>;
 }
 
-export const sourceNameAfterPipeRegEx = / \| .*$/;  // Matches " | Healthcare IT News" from a title like "xyz title | Healthcare IT News"
-export const sourceNameAfterHyphenRegEx = / \- .*$/ // Matches " - Healthcare IT News" from a title like "xyz title - Healthcare IT News"
-export const firstSentenceRegExp = /`^(.*?)[.?!]`/; // Matches the first sentence of any text
+export class EnrichQueryableHtmlContent implements ContentTransformer {
+    static readonly singleton = new EnrichQueryableHtmlContent();
 
-export function typicalTitleCleanser(suggested: ContentTitle, htmlContent: CheerioStatic): ContentTitle {
-    // for now we'll just strip the vertical bar and after
-    return suggested.replace(sourceNameAfterPipeRegEx, "");
+    async transform(ctx: GovernedContentContext, content: GovernedContent): Promise<GovernedContent | QueryableHtmlContent> {
+        if (isQueryableHtmlContent(content)) {
+            // it's already queryable so don't touch it
+            return content;
+        }
 
-    // TODO: when queryable HTML content is created, the UniformResource should be passed in with
-    // the site title (e.g. "Healthcare IT News") so that the hyphen version can be replaced too.
-    // For now, replacing hyphen is too dangerous because hyphens can be part of legitimate titles.
-}
-
-export class TypicalQueryableHtmlContent implements QueryableHtmlContent {
-    readonly isCuratableContent = true;
-    readonly isQueryableHtmlContent = true;
-    readonly htmlContent: CheerioStatic;
-    readonly title: ContentTitle;
-    readonly socialGraph: SocialGraph;
-
-    constructor(readonly htmlSource: string, transformTitle: ContentTitleTransformer = typicalTitleCleanser) {
-        this.htmlContent = cheerio.load(htmlSource, {
+        // enrich the existing content with cheerio static document
+        const document = cheerio.load(ctx.htmlSource, {
             normalizeWhitespace: true,
             decodeEntities: true,
-        });
-        this.socialGraph = this.parseSocialGraph();
-
-        // If an og:title is available, use it otherwise use twitter:title otherwise use page title
-        // and then transform it per the given rule.
-        let title = this.htmlContent('head > title').text();
-        if (this.socialGraph.twitter?.title)
-            title = this.socialGraph.twitter.title;
-        if (this.socialGraph.openGraph?.title)
-            title = this.socialGraph.openGraph.title;
-        this.title = transformTitle(title, this.htmlContent);
+        })
+        return {
+            ...content,
+            htmlSource: ctx.htmlSource,
+            document: document,
+            anchors: (retain?: AnchorFilter): HtmlAnchor[] => {
+                const result: HtmlAnchor[] = []
+                document("a").each((index, anchorTag): void => {
+                    const href = anchorTag.attribs["href"];
+                    if (href) {
+                        const anchor: HtmlAnchor = {
+                            href: href,
+                            label: document(anchorTag).text()
+                        }
+                        if (retain) {
+                            if (retain(anchor)) result.push(anchor);
+                        } else {
+                            result.push(anchor);
+                        }
+                    }
+                });
+                return result;
+            }
+        };
     }
+}
 
-    protected parseSocialGraph(): SocialGraph {
+export class EnrichCuratableContent implements ContentTransformer {
+    static readonly singleton = new EnrichCuratableContent();
+
+    parseSocialGraph(ctx: GovernedContentContext, document: CheerioStatic): SocialGraph {
         let og: OpenGraph = {};
         let tc: TwitterCard = {};
         const metaTransformers: {
@@ -122,7 +144,7 @@ export class TypicalQueryableHtmlContent implements QueryableHtmlContent {
             'twitter:site': (v: string) => { tc.site = v },
             'twitter:creator': (v: string) => { tc.creator = v },
         };
-        const meta = this.htmlContent('meta') as any;
+        const meta = document('meta') as any;
         const keys = Object.keys(meta);
         for (const outerKey in metaTransformers) {
             keys.forEach(function (innerKey) {
@@ -139,22 +161,138 @@ export class TypicalQueryableHtmlContent implements QueryableHtmlContent {
         return result as SocialGraph;
     }
 
-    anchors(retain?: AnchorFilter): HtmlAnchor[] {
-        const result: HtmlAnchor[] = []
-        this.htmlContent("a").each((index, anchorTag): void => {
-            const href = anchorTag.attribs["href"];
-            if (href) {
-                const anchor: HtmlAnchor = {
-                    href: href,
-                    label: this.htmlContent(anchorTag).text()
-                }
-                if (retain) {
-                    if (retain(anchor)) result.push(anchor);
-                } else {
-                    result.push(anchor);
-                }
-            }
-        });
+    title(ctx: GovernedContentContext, document: CheerioStatic, sg?: SocialGraph): string {
+        // If an og:title is available, use it otherwise use twitter:title otherwise use page title
+        const socialGraph = sg ? sg : this.parseSocialGraph(ctx, document);
+        let result = document('head > title').text();
+        if (socialGraph.twitter?.title)
+            result = socialGraph.twitter.title;
+        if (socialGraph.openGraph?.title)
+            result = socialGraph.openGraph.title;
         return result;
     }
+
+    async transform(ctx: GovernedContentContext, content: GovernedContent): Promise<GovernedContent | CuratableContent> {
+        let result: GovernedContent | QueryableHtmlContent = content;
+        if (!isQueryableHtmlContent(result)) {
+            // first make it queryable
+            result = await EnrichQueryableHtmlContent.singleton.transform(ctx, result);
+        }
+
+        if (isQueryableHtmlContent(result)) {
+            const socialGraph = this.parseSocialGraph(ctx, result.document)
+            return {
+                ...result,
+                title: this.title(ctx, result.document, socialGraph),
+                socialGraph: socialGraph
+            };
+        } else {
+            console.error("[EnrichCuratableContent.transform()] This should never happen!")
+            return content;
+        }
+    }
+}
+
+export class StandardizeCurationTitle implements ContentTransformer {
+    // RegEx matches " | Healthcare IT News" from a title like "xyz title | Healthcare IT News"
+    static readonly sourceNameAfterPipeRegEx = / \| .*$/;
+    static readonly singleton = new StandardizeCurationTitle();
+
+    async transform(ctx: GovernedContentContext, content: GovernedContent): Promise<GovernedContent | CuratableContent | TransformedContent> {
+        if (isCuratableContent(content)) {
+            const suggested = content.title;
+            const standardized = suggested.replace(StandardizeCurationTitle.sourceNameAfterPipeRegEx, "");
+            if (suggested != standardized) {
+                return {
+                    ...content,
+                    title: standardized,
+                    transformedFromContent: content,
+                    pipePosition: nextTransformationPipePosition(content),
+                    remarks: `Standardized title (was "${suggested}")`
+                }
+            }
+        }
+        return content;
+    }
+}
+
+export interface ReadableContentAsyncSupplier {
+    (): Promise<{ [key: string]: any }>;
+}
+
+export interface MercuryReadableContent extends GovernedContent {
+    readonly mercuryReadable: ReadableContentAsyncSupplier;
+}
+
+export function isMercuryReadableContent(o: any): o is MercuryReadableContent {
+    return o && "mercuryReadable" in o;
+}
+
+export class EnrichMercuryReadableContent implements ContentTransformer {
+    static readonly singleton = new EnrichMercuryReadableContent();
+
+    async transform(ctx: GovernedContentContext, content: GovernedContent): Promise<MercuryReadableContent> {
+        return {
+            ...content,
+            mercuryReadable: async (): Promise<{ [key: string]: any }> => {
+                const Mercury = require('@postlight/mercury-parser');
+                return await Mercury.parse(ctx.uri, { html: ctx.htmlSource });
+            },
+        }
+    }
+}
+
+export interface ReadableContentSupplier {
+    (): { [key: string]: any };
+}
+
+export interface MozillaReadabilityContent extends GovernedContent {
+    readonly mozillaReadability: ReadableContentSupplier;
+}
+
+export function isMozillaReadabilityContent(o: any): o is MozillaReadabilityContent {
+    return o && "mozillaReadability" in o;
+}
+
+export class EnrichMozillaReadabilityContent implements ContentTransformer {
+    static readonly singleton = new EnrichMozillaReadabilityContent();
+
+    async transform(ctx: GovernedContentContext, content: GovernedContent): Promise<MozillaReadabilityContent> {
+        return {
+            ...content,
+            mozillaReadability: (): { [key: string]: any } => {
+                const { Readability } = require('@mozilla/readability');
+                const { JSDOM } = require('jsdom');
+                const jd = new JSDOM(ctx.htmlSource, { url: ctx.uri })
+                const reader = new Readability(jd.window.document);
+                return reader.parse();
+            }
+        }
+    }
+}
+
+export function contentTransformationPipe(...chain: ContentTransformer[]): ContentTransformer {
+    if (chain.length == 0) {
+        return new class implements ContentTransformer {
+            async transform(ctx: GovernedContentContext, content: GovernedContent): Promise<GovernedContent> {
+                return content;
+            }
+        }()
+    }
+    if (chain.length == 1) {
+        return new class implements ContentTransformer {
+            async transform(ctx: GovernedContentContext, content: GovernedContent): Promise<GovernedContent> {
+                return await chain[0].transform(ctx, content);
+            }
+        }()
+    }
+    return new class implements ContentTransformer {
+        async transform(ctx: GovernedContentContext, content: GovernedContent): Promise<GovernedContent> {
+            let result = await chain[0].transform(ctx, content);
+            for (let i = 1; i < chain.length; i++) {
+                result = await chain[i].transform(ctx, result);
+            }
+            return result;
+        }
+    }()
 }

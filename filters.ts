@@ -1,7 +1,17 @@
+import * as tr from "./transformers";
 import * as ur from "./uniform-resource";
 
-export function filterPipe(...chain: ur.UniformResourceFilter[]): ur.UniformResourceFilter {
-    return new class implements ur.UniformResourceFilter {
+export interface UniformResourceFilter {
+    retainOriginal?(resource: ur.UniformResource): boolean;
+    retainTransformed?(resource: ur.UniformResource | tr.TransformedResource): boolean;
+}
+
+export interface UniformResourceFilterReporter {
+    (resource: ur.UniformResource): void;
+}
+
+export function filterPipe(...chain: UniformResourceFilter[]): UniformResourceFilter {
+    return new class implements UniformResourceFilter {
         retainOriginal(resource: ur.UniformResource): boolean {
             for (const c of chain) {
                 if (c.retainOriginal) {
@@ -13,7 +23,7 @@ export function filterPipe(...chain: ur.UniformResourceFilter[]): ur.UniformReso
             return true;
         }
 
-        retainTransformed(resource: ur.TransformedResource): boolean {
+        retainTransformed(resource: tr.TransformedResource): boolean {
             for (const c of chain) {
                 if (c.retainTransformed) {
                     if (!c.retainTransformed(resource)) {
@@ -30,7 +40,7 @@ export class FilteredResourcesCounter {
     readonly reporters: {
         [key: string]: {
             removedCount: number;
-            reporter: ur.UniformResourceFilterReporter
+            reporter: UniformResourceFilterReporter
         }
     } = {};
 
@@ -38,7 +48,7 @@ export class FilteredResourcesCounter {
         return this.reporters[key].removedCount;
     }
 
-    reporter(key: string): ur.UniformResourceFilterReporter {
+    reporter(key: string): UniformResourceFilterReporter {
         const reporter = (resource: ur.UniformResource): void => {
             this.reporters[key].removedCount++;
         }
@@ -50,10 +60,10 @@ export class FilteredResourcesCounter {
     }
 }
 
-export class BlankLabelFilter implements ur.UniformResourceFilter {
+export class BlankLabelFilter implements UniformResourceFilter {
     static readonly singleton = new BlankLabelFilter();
 
-    constructor(readonly reporter?: ur.UniformResourceFilterReporter) {
+    constructor(readonly reporter?: UniformResourceFilterReporter) {
     }
 
     retainOriginal(resource: ur.UniformResource): boolean {
@@ -67,10 +77,10 @@ export class BlankLabelFilter implements ur.UniformResourceFilter {
     }
 }
 
-export class BrowserTraversibleFilter implements ur.UniformResourceFilter {
+export class BrowserTraversibleFilter implements UniformResourceFilter {
     static readonly singleton = new BrowserTraversibleFilter();
 
-    constructor(readonly reporter?: ur.UniformResourceFilterReporter) {
+    constructor(readonly reporter?: UniformResourceFilterReporter) {
     }
 
     retainOriginal(resource: ur.UniformResource): boolean {
