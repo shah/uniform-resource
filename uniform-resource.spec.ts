@@ -1,28 +1,23 @@
 import { Expect, Test, TestCase, TestFixture, Timeout } from "alsatian";
 import * as fs from "fs";
 import mime from "whatwg-mimetype";
-import { Cache, lruCache } from "./cache";
-import * as c from "./content";
-import * as filters from "./filters";
-import * as follow from "./follow-urls";
-import * as s from "./suppliers";
-import * as tr from "./transformers";
+import * as tru from "@shah/traverse-urls";
 import * as ur from "./uniform-resource";
 
 @TestFixture("Uniform Resource Test Suite")
 export class TestSuite {
-    readonly redirectVisitsCache: Cache<follow.VisitResult[]>;
-    readonly typicalSupplier: s.TypicalResourcesSupplier;
+    readonly redirectVisitsCache: ur.Cache<tru.VisitResult[]>;
+    readonly typicalSupplier: ur.TypicalResourcesSupplier;
     readonly ctx: ur.UniformResourceContext;
 
     constructor() {
-        this.redirectVisitsCache = lruCache();
-        this.typicalSupplier = new s.TypicalResourcesSupplier({
+        this.redirectVisitsCache = ur.lruCache();
+        this.typicalSupplier = new ur.TypicalResourcesSupplier({
             originURN: `test`,
-            unifResourceTr: tr.transformationPipe(
-                new tr.FollowRedirectsGranular(this.redirectVisitsCache),
-                tr.EnrichGovernedContent.singleton,
-                tr.EnrichCuratableContent.readable),
+            unifResourceTr: ur.transformationPipe(
+                new ur.FollowRedirectsGranular(this.redirectVisitsCache),
+                ur.EnrichGovernedContent.singleton,
+                ur.EnrichCuratableContent.readable),
         });
         this.ctx = {
             isUniformResourceContext: true
@@ -38,24 +33,24 @@ export class TestSuite {
         Expect(base64Content).toBeDefined();
 
         const testURN = `test:${base64EncodedHtmlFileName}`;
-        const frc = new filters.FilteredResourcesCounter();
-        const contentTr = c.contentTransformationPipe(c.EnrichQueryableHtmlContent.singleton);
+        const frc = new ur.FilteredResourcesCounter();
+        const contentTr = ur.contentTransformationPipe(ur.EnrichQueryableHtmlContent.singleton);
         const htmlContent = await contentTr.transform({
             uri: testURN,
             htmlSource: Buffer.from(base64Content.toString(), 'base64').toString()
         }, {
             contentType: "text/html",
             mimeType: new mime("text/html")
-        }) as c.QueryableHtmlContent;
-        const emrs = new s.EmailMessageResourcesSupplier(htmlContent, {
+        }) as ur.QueryableHtmlContent;
+        const emrs = new ur.EmailMessageResourcesSupplier(htmlContent, {
             originURN: testURN,
-            filter: filters.filterPipe(
-                new filters.BlankLabelFilter(frc.reporter("Blank label")),
-                new filters.BrowserTraversibleFilter(frc.reporter("Not traversible"))),
-            unifResourceTr: tr.transformationPipe(
-                tr.RemoveLabelLineBreaksAndTrimSpaces.singleton,
-                tr.FollowRedirectsGranular.singleton,
-                tr.RemoveTrackingCodesFromUrl.singleton)
+            filter: ur.filterPipe(
+                new ur.BlankLabelFilter(frc.reporter("Blank label")),
+                new ur.BrowserTraversibleFilter(frc.reporter("Not traversible"))),
+            unifResourceTr: ur.transformationPipe(
+                ur.RemoveLabelLineBreaksAndTrimSpaces.singleton,
+                ur.FollowRedirectsGranular.singleton,
+                ur.RemoveTrackingCodesFromUrl.singleton)
         });
 
         const retained: ur.UniformResource[] = [];
@@ -64,8 +59,8 @@ export class TestSuite {
         }
         await emrs.forEachResource(ctx, (resource: ur.UniformResource): void => {
             retained.push(resource);
-            if (tr.isTransformedResource(resource)) {
-                // console.log(`[${resource.label}] ${tr.allTransformationRemarks(resource).join(" | ")} (${resource.pipePosition})`, resource.uri);
+            if (ur.isTransformedResource(resource)) {
+                // console.log(`[${resource.label}] ${ur.allTransformationRemarks(resource).join(" | ")} (${resource.pipePosition})`, resource.uri);
             } else {
                 // console.log(`[${resource.label}] no transformations`, resource.uri);
             }
@@ -80,10 +75,10 @@ export class TestSuite {
     async testSingleValidFollowedResource(): Promise<void> {
         const resource = await this.typicalSupplier.resourceFromAnchor(this.ctx, { href: "https://t.co/ELrZmo81wI" });
         Expect(resource).toBeDefined();
-        Expect(tr.isFollowedResource(resource)).toBe(true);
-        if (tr.isFollowedResource(resource)) {
+        Expect(ur.isFollowedResource(resource)).toBe(true);
+        if (ur.isFollowedResource(resource)) {
             Expect(resource.followResults.length).toBe(5);
-            Expect(follow.isTerminalTextContentResult(resource.terminalResult)).toBe(true);
+            Expect(tru.isTerminalTextContentResult(resource.terminalResult)).toBe(true);
             Expect(resource.uri).toBe("https://www.foxnews.com/lifestyle/photo-of-donald-trump-look-alike-in-spain-goes-viral");
         }
     }
@@ -93,8 +88,8 @@ export class TestSuite {
     async testSingleValidGovernedContent(): Promise<void> {
         const resource = await this.typicalSupplier.resourceFromAnchor(this.ctx, { href: "https://t.co/ELrZmo81wI" });
         Expect(resource).toBeDefined();
-        Expect(c.isGovernedContent(resource)).toBe(true);
-        if (c.isGovernedContent(resource)) {
+        Expect(ur.isGovernedContent(resource)).toBe(true);
+        if (ur.isGovernedContent(resource)) {
             Expect(resource.contentType).toBe("text/html; charset=utf-8");
             Expect(resource.mimeType.essence).toBe("text/html");
         }
@@ -105,8 +100,8 @@ export class TestSuite {
     async testSingleValidResourceContent(): Promise<void> {
         const resource = await this.typicalSupplier.resourceFromAnchor(this.ctx, { href: "https://t.co/ELrZmo81wI" });
         Expect(resource).toBeDefined();
-        Expect(tr.isCuratableContentResource(resource)).toBe(true);
-        if (tr.isCuratableContentResource(resource)) {
+        Expect(ur.isCuratableContentResource(resource)).toBe(true);
+        if (ur.isCuratableContentResource(resource)) {
             Expect(resource.curatableContent.title).toBe("Photo of Donald Trump 'look-alike' in Spain goes viral");
             Expect(resource.curatableContent.socialGraph).toBeDefined();
             if (resource.curatableContent.socialGraph) {
@@ -123,13 +118,13 @@ export class TestSuite {
     async testSingleValidReadableContent(): Promise<void> {
         const resource = await this.typicalSupplier.resourceFromAnchor(this.ctx, { href: "https://t.co/ELrZmo81wI" });
         Expect(resource).toBeDefined();
-        Expect(tr.isCuratableContentResource(resource)).toBe(true);
-        if (tr.isCuratableContentResource(resource)) {
+        Expect(ur.isCuratableContentResource(resource)).toBe(true);
+        if (ur.isCuratableContentResource(resource)) {
             const content = resource.curatableContent;
-            if (c.isMercuryReadableContent(content)) {
+            if (ur.isMercuryReadableContent(content)) {
                 Expect(await content.mercuryReadable()).toBeDefined();
             }
-            if (c.isMozillaReadabilityContent(content)) {
+            if (ur.isMozillaReadabilityContent(content)) {
                 Expect(content.mozillaReadability()).toBeDefined();
             }
         }
@@ -140,11 +135,11 @@ export class TestSuite {
     async testSingleInvalidUniformResource(): Promise<void> {
         const resource = await this.typicalSupplier.resourceFromAnchor(this.ctx, { href: "https://t.co/fDxPF" });
         Expect(resource).toBeDefined();
-        Expect(tr.isFollowedResource(resource)).toBe(true);
-        if (tr.isFollowedResource(resource)) {
-            Expect(follow.isTerminalTextContentResult(resource.terminalResult)).toBe(false);
-            Expect(follow.isTerminalResult(resource.terminalResult)).toBe(true);
-            if (follow.isTerminalResult(resource.terminalResult)) {
+        Expect(ur.isFollowedResource(resource)).toBe(true);
+        if (ur.isFollowedResource(resource)) {
+            Expect(tru.isTerminalTextContentResult(resource.terminalResult)).toBe(false);
+            Expect(tru.isTerminalResult(resource.terminalResult)).toBe(true);
+            if (tru.isTerminalResult(resource.terminalResult)) {
                 Expect(resource.terminalResult.httpStatus).toBe(404);
             }
         }
