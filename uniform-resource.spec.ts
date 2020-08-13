@@ -1,7 +1,7 @@
+import * as tru from "@shah/traverse-urls";
 import { Expect, Test, TestCase, TestFixture, Timeout } from "alsatian";
 import * as fs from "fs";
 import mime from "whatwg-mimetype";
-import * as tru from "@shah/traverse-urls";
 import * as ur from "./uniform-resource";
 
 @TestFixture("Uniform Resource Test Suite")
@@ -60,9 +60,9 @@ export class TestSuite {
         await emrs.forEachResource(ctx, (resource: ur.UniformResource): void => {
             retained.push(resource);
             if (ur.isTransformedResource(resource)) {
-                // console.log(`[${resource.label}] ${ur.allTransformationRemarks(resource).join(" | ")} (${resource.pipePosition})`, resource.uri);
+                console.log(`[${resource.label}] ${ur.allTransformationRemarks(resource).join(" | ")} (${resource.pipePosition})`, resource.uri);
             } else {
-                // console.log(`[${resource.label}] no transformations`, resource.uri);
+                console.log(`[${resource.label}] no transformations`, resource.uri);
             }
         });
         Expect(frc.count("Blank label")).toBe(9);

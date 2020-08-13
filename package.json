@@ -1,6 +1,6 @@
 {
     "name": "@shah/uniform-resource",
-    "version": "0.5.0",
+    "version": "0.5.1",
     "description": "Uniform resource suppliers and consumers for content orchestration engines",
     "main": "dist/uniform-resource.js",
     "types": "dist/uniform-resource.d.ts",

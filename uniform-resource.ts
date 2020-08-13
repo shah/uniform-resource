@@ -1,6 +1,6 @@
+import * as tru from "@shah/traverse-urls";
 import cheerio from "cheerio";
 import mime from "whatwg-mimetype";
-import * as tru from "@shah/traverse-urls";
 
 /*******************************
  * Uniform resource governance *
