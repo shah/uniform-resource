@@ -1,8 +1,6 @@
-# Uniform Resources Management System
+# Uniform Resources Acquisition and Transformation
 
-TypeScript based NodeJS uniform resource suppliers and consumers for content orchestration engines.
-
-Allows "smart" processing of bookmarks, tweets, email links, etc.
+TypeScript based NodeJS uniform resource acquisition and transformation library.
 
 # Developer Onboarding
 
@@ -10,6 +8,7 @@ Start the `.devcontainer` or use local NodeJS + TypeScript installation and then
 
     git clone https://github.com/shah/uniform-resource.git
     cd uniform-resource
+    npm login --registry=https://npm.pkg.github.com
     npm install
     npm test
 
