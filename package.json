@@ -27,6 +27,7 @@
     "license": "MIT",
     "dependencies": {
         "@shah/traverse-urls": "0.5.0",
+        "@shah/ts-cache": "0.0.2",
         "@mozilla/readability": "^0.3.0",
         "@postlight/mercury-parser": "^2.2.0",
         "cheerio": "^1.0.0-rc.3",

@@ -1,4 +1,5 @@
 import * as tru from "@shah/traverse-urls";
+import { Cache, lruCache } from "@shah/ts-cache";
 import { Expect, Test, TestCase, TestFixture, Timeout } from "alsatian";
 import * as fs from "fs";
 import mime from "whatwg-mimetype";
@@ -6,12 +7,12 @@ import * as ur from "./uniform-resource";
 
 @TestFixture("Uniform Resource Test Suite")
 export class TestSuite {
-    readonly redirectVisitsCache: ur.Cache<tru.VisitResult[]>;
+    readonly redirectVisitsCache: Cache<tru.VisitResult[]>;
     readonly typicalSupplier: ur.TypicalResourcesSupplier;
     readonly ctx: ur.UniformResourceContext;
 
     constructor() {
-        this.redirectVisitsCache = ur.lruCache();
+        this.redirectVisitsCache = lruCache();
         this.typicalSupplier = new ur.TypicalResourcesSupplier({
             originURN: `test`,
             unifResourceTr: ur.transformationPipe(
