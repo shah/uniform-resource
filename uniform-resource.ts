@@ -285,7 +285,7 @@ export class EnrichMercuryReadableContent implements ContentTransformer {
             ...content,
             mercuryReadable: async (): Promise<{ [key: string]: any }> => {
                 const Mercury = require('@postlight/mercury-parser');
-                return await Mercury.parse(ctx.uri, { html: ctx.htmlSource });
+                return await Mercury.parse(ctx.uri, { html: Buffer.from(ctx.htmlSource, 'utf8') });
             },
         }
     }
