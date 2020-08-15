@@ -2,6 +2,7 @@ import * as tru from "@shah/traverse-urls";
 import { Cache, lruCache } from "@shah/ts-cache";
 import { Expect, Test, TestFixture, Timeout } from "alsatian";
 import * as ur from "./uniform-resource";
+import * as p from "@shah/ts-pipe";
 
 @TestFixture("Uniform Resource Test Suite")
 export class TestSuite {
@@ -10,7 +11,7 @@ export class TestSuite {
 
     constructor() {
         this.redirectVisitsCache = lruCache();
-        this.resourceTrPipe = ur.resourceTransformationPipe(
+        this.resourceTrPipe = p.pipe(
             new ur.FollowRedirectsGranular(this.redirectVisitsCache),
             ur.EnrichGovernedContent.singleton,
             ur.EnrichCuratableContent.readable);

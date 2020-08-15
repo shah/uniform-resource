@@ -2,6 +2,7 @@ import * as tru from "@shah/traverse-urls";
 import { Cache, lruCache } from "@shah/ts-cache";
 import cheerio from "cheerio";
 import mime from "whatwg-mimetype";
+import * as p from "@shah/ts-pipe";
 
 /*******************************
  * Uniform resource governance *
@@ -130,14 +131,13 @@ export function isTransformedContent(o: any): o is TransformedContent {
  * Content transformers *
  ************************/
 
-export interface ContentTransformer {
-    transform(ctx: GovernedContentContext, content: GovernedContent): Promise<GovernedContent>;
+export interface ContentTransformer extends p.PipeUnion<GovernedContentContext, GovernedContent> {
 }
 
 export class EnrichQueryableHtmlContent implements ContentTransformer {
     static readonly singleton = new EnrichQueryableHtmlContent();
 
-    async transform(ctx: GovernedContentContext, content: GovernedContent): Promise<GovernedContent | QueryableHtmlContent> {
+    async flow(ctx: GovernedContentContext, content: GovernedContent): Promise<GovernedContent | QueryableHtmlContent> {
         if (isQueryableHtmlContent(content)) {
             // it's already queryable so don't touch it
             return content;
@@ -221,11 +221,11 @@ export class BuildCuratableContent implements ContentTransformer {
         return result;
     }
 
-    async transform(ctx: GovernedContentContext, content: GovernedContent): Promise<GovernedContent | CuratableContent> {
+    async flow(ctx: GovernedContentContext, content: GovernedContent): Promise<GovernedContent | CuratableContent> {
         let result: GovernedContent | QueryableHtmlContent = content;
         if (!isQueryableHtmlContent(result)) {
             // first make it queryable
-            result = await EnrichQueryableHtmlContent.singleton.transform(ctx, result);
+            result = await EnrichQueryableHtmlContent.singleton.flow(ctx, result);
         }
 
         if (isQueryableHtmlContent(result)) {
@@ -247,7 +247,7 @@ export class StandardizeCurationTitle implements ContentTransformer {
     static readonly sourceNameAfterPipeRegEx = / \| .*$/;
     static readonly singleton = new StandardizeCurationTitle();
 
-    async transform(ctx: GovernedContentContext, content: GovernedContent): Promise<GovernedContent | CuratableContent | TransformedContent> {
+    async flow(ctx: GovernedContentContext, content: GovernedContent): Promise<GovernedContent | CuratableContent | TransformedContent> {
         if (isCuratableContent(content)) {
             const suggested = content.title;
             const standardized = suggested.replace(StandardizeCurationTitle.sourceNameAfterPipeRegEx, "");
@@ -280,7 +280,7 @@ export function isMercuryReadableContent(o: any): o is MercuryReadableContent {
 export class EnrichMercuryReadableContent implements ContentTransformer {
     static readonly singleton = new EnrichMercuryReadableContent();
 
-    async transform(ctx: GovernedContentContext, content: GovernedContent): Promise<MercuryReadableContent> {
+    async flow(ctx: GovernedContentContext, content: GovernedContent): Promise<MercuryReadableContent> {
         return {
             ...content,
             mercuryReadable: async (): Promise<{ [key: string]: any }> => {
@@ -306,7 +306,7 @@ export function isMozillaReadabilityContent(o: any): o is MozillaReadabilityCont
 export class EnrichMozillaReadabilityContent implements ContentTransformer {
     static readonly singleton = new EnrichMozillaReadabilityContent();
 
-    async transform(ctx: GovernedContentContext, content: GovernedContent): Promise<MozillaReadabilityContent> {
+    async flow(ctx: GovernedContentContext, content: GovernedContent): Promise<MozillaReadabilityContent> {
         return {
             ...content,
             mozillaReadability: (): { [key: string]: any } => {
@@ -318,32 +318,6 @@ export class EnrichMozillaReadabilityContent implements ContentTransformer {
             }
         }
     }
-}
-
-export function contentTransformationPipe(...chain: ContentTransformer[]): ContentTransformer {
-    if (chain.length == 0) {
-        return new class implements ContentTransformer {
-            async transform(ctx: GovernedContentContext, content: GovernedContent): Promise<GovernedContent> {
-                return content;
-            }
-        }()
-    }
-    if (chain.length == 1) {
-        return new class implements ContentTransformer {
-            async transform(ctx: GovernedContentContext, content: GovernedContent): Promise<GovernedContent> {
-                return await chain[0].transform(ctx, content);
-            }
-        }()
-    }
-    return new class implements ContentTransformer {
-        async transform(ctx: GovernedContentContext, content: GovernedContent): Promise<GovernedContent> {
-            let result = await chain[0].transform(ctx, content);
-            for (let i = 1; i < chain.length; i++) {
-                result = await chain[i].transform(ctx, result);
-            }
-            return result;
-        }
-    }()
 }
 
 /************************************
@@ -378,14 +352,13 @@ export function allTransformationRemarks(tr: TransformedResource): string[] {
     return result;
 }
 
-export interface UniformResourceTransformer {
-    transform(ctx: ResourceTransformerContext, resource: UniformResource): Promise<UniformResource>;
+export interface UniformResourceTransformer extends p.PipeUnion<ResourceTransformerContext, UniformResource> {
 }
 
 export class RemoveLabelLineBreaksAndTrimSpaces implements UniformResourceTransformer {
     static readonly singleton = new RemoveLabelLineBreaksAndTrimSpaces();
 
-    async transform(ctx: ResourceTransformerContext, resource: UniformResource): Promise<UniformResource | TransformedResource> {
+    async flow(ctx: ResourceTransformerContext, resource: UniformResource): Promise<UniformResource | TransformedResource> {
         if (!resource.label) {
             return resource;
         }
@@ -407,7 +380,7 @@ export class RemoveLabelLineBreaksAndTrimSpaces implements UniformResourceTransf
 export class RemoveTrackingCodesFromUrl implements UniformResourceTransformer {
     static readonly singleton = new RemoveTrackingCodesFromUrl();
 
-    async transform(ctx: ResourceTransformerContext, resource: UniformResource): Promise<UniformResource | TransformedResource> {
+    async flow(ctx: ResourceTransformerContext, resource: UniformResource): Promise<UniformResource | TransformedResource> {
         const cleanedURI = resource.uri.replace(/(?<=&|\?)utm_.*?(&|$)/igm, "");
         if (cleanedURI != resource.uri) {
             const transformed: TransformedResource = {
@@ -439,7 +412,7 @@ export class FollowRedirectsGranular implements UniformResourceTransformer {
     constructor(readonly cache: Cache<tru.VisitResult[]> = lruCache()) {
     }
 
-    async transform(ctx: ResourceTransformerContext, resource: UniformResource): Promise<UniformResource | InvalidResource | FollowedResource> {
+    async flow(ctx: ResourceTransformerContext, resource: UniformResource): Promise<UniformResource | InvalidResource | FollowedResource> {
         let result: UniformResource | InvalidResource | FollowedResource = resource;
         let visitResults = this.cache[resource.uri];
         if (!visitResults) {
@@ -475,7 +448,7 @@ export class FollowRedirectsGranular implements UniformResourceTransformer {
 export class EnrichGovernedContent implements UniformResourceTransformer {
     static readonly singleton = new EnrichGovernedContent();
 
-    async transform(ctx: ResourceTransformerContext, resource: UniformResource): Promise<UniformResource | (UniformResource & GovernedContent)> {
+    async flow(ctx: ResourceTransformerContext, resource: UniformResource): Promise<UniformResource | (UniformResource & GovernedContent)> {
         let result: UniformResource | (UniformResource & GovernedContent) = resource;
         if (isFollowedResource(resource) && tru.isTerminalTextContentResult(resource.terminalResult)) {
             const textResult = resource.terminalResult;
@@ -498,10 +471,10 @@ export function isCuratableContentResource(o: any): o is CuratableContentResourc
 }
 
 export class EnrichCuratableContent implements UniformResourceTransformer {
-    static readonly standard = new EnrichCuratableContent(contentTransformationPipe(
+    static readonly standard = new EnrichCuratableContent(p.pipe(
         BuildCuratableContent.singleton,
         StandardizeCurationTitle.singleton));
-    static readonly readable = new EnrichCuratableContent(contentTransformationPipe(
+    static readonly readable = new EnrichCuratableContent(p.pipe(
         BuildCuratableContent.singleton,
         StandardizeCurationTitle.singleton,
         EnrichMercuryReadableContent.singleton,
@@ -510,11 +483,11 @@ export class EnrichCuratableContent implements UniformResourceTransformer {
     constructor(readonly contentTr: ContentTransformer) {
     }
 
-    async transform(ctx: ResourceTransformerContext, resource: UniformResource): Promise<UniformResource | CuratableContentResource> {
+    async flow(ctx: ResourceTransformerContext, resource: UniformResource): Promise<UniformResource | CuratableContentResource> {
         let result: UniformResource | CuratableContentResource = resource;
         if (isFollowedResource(resource) && tru.isTerminalTextContentResult(resource.terminalResult)) {
             const textResult = resource.terminalResult;
-            const content = await this.contentTr.transform({
+            const content = await this.contentTr.flow({
                 uri: resource.uri,
                 htmlSource: textResult.contentText
             }, {
@@ -528,32 +501,6 @@ export class EnrichCuratableContent implements UniformResourceTransformer {
         }
         return result;
     }
-}
-
-export function resourceTransformationPipe(...chain: UniformResourceTransformer[]): UniformResourceTransformer {
-    if (chain.length == 0) {
-        return new class implements UniformResourceTransformer {
-            async transform(ctx: ResourceTransformerContext, resource: UniformResource): Promise<UniformResource> {
-                return resource;
-            }
-        }()
-    }
-    if (chain.length == 1) {
-        return new class implements UniformResourceTransformer {
-            async transform(ctx: ResourceTransformerContext, resource: UniformResource): Promise<UniformResource> {
-                return await chain[0].transform(ctx, resource);
-            }
-        }()
-    }
-    return new class implements UniformResourceTransformer {
-        async transform(ctx: ResourceTransformerContext, resource: UniformResource): Promise<UniformResource> {
-            let result = await chain[0].transform(ctx, resource);
-            for (let i = 1; i < chain.length; i++) {
-                result = await chain[i].transform(ctx, result);
-            }
-            return result;
-        }
-    }()
 }
 
 export interface AcquireResourceOptions {
@@ -570,5 +517,5 @@ export async function acquireResource({ uri, label, provenance, transformer }: A
         uri: uri,
         label: label
     };
-    return await transformer.transform({}, result);
+    return await transformer.flow({}, result);
 }
