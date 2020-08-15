@@ -1,8 +1,8 @@
 import * as tru from "@shah/traverse-urls";
 import { Cache, lruCache } from "@shah/ts-cache";
+import * as p from "@shah/ts-pipe";
 import { Expect, Test, TestFixture, Timeout } from "alsatian";
 import * as ur from "./uniform-resource";
-import * as p from "@shah/ts-pipe";
 
 @TestFixture("Uniform Resource Test Suite")
 export class TestSuite {

@@ -1,8 +1,8 @@
 import * as tru from "@shah/traverse-urls";
 import { Cache, lruCache } from "@shah/ts-cache";
+import * as p from "@shah/ts-pipe";
 import cheerio from "cheerio";
 import mime from "whatwg-mimetype";
-import * as p from "@shah/ts-pipe";
 
 /*******************************
  * Uniform resource governance *
