@@ -88,6 +88,18 @@ export interface AnchorFilter {
   (retain: HtmlAnchor): boolean;
 }
 
+export interface HtmlImage {
+  readonly src?: string;
+  readonly alt?: string;
+  readonly width?: number | string;
+  readonly height?: number | string;
+  readonly imageElem: CheerioElement;
+}
+
+export interface ImageFilter {
+  (retain: HtmlImage): boolean;
+}
+
 export interface CuratableContent extends GovernedContent {
   readonly title: ContentTitle;
   readonly socialGraph: SocialGraph;
@@ -101,6 +113,7 @@ export interface QueryableHtmlContent extends GovernedContent {
   readonly htmlSource: string;
   readonly document: CheerioStatic;
   readonly anchors: (retain?: AnchorFilter) => HtmlAnchor[];
+  readonly images: (retain?: ImageFilter) => HtmlImage[];
 }
 
 export function isQueryableHtmlContent(o: any): o is QueryableHtmlContent {
@@ -147,6 +160,51 @@ export interface ContentTransformer extends p.PipeUnion<GovernedContentContext, 
 export class EnrichQueryableHtmlContent implements ContentTransformer {
   static readonly singleton = new EnrichQueryableHtmlContent();
 
+  typedAttribute(elem: CheerioElement, name: string): string | number {
+    const value = elem.attribs[name];
+    const int = parseInt(value);
+    const float = parseFloat(value);
+    return isNaN(float) ? (isNaN(int) ? value : int) : float;
+  }
+
+  anchors(document: CheerioStatic, retain?: AnchorFilter): HtmlAnchor[] {
+    const result: HtmlAnchor[] = []
+    document("a").each((index, anchorTag): void => {
+      const href = anchorTag.attribs["href"];
+      if (href) {
+        const anchor: HtmlAnchor = {
+          href: href,
+          label: document(anchorTag).text()
+        }
+        if (retain) {
+          if (retain(anchor)) result.push(anchor);
+        } else {
+          result.push(anchor);
+        }
+      }
+    });
+    return result;
+  }
+
+  images(document: CheerioStatic, retain?: ImageFilter): HtmlImage[] {
+    const result: HtmlImage[] = []
+    document("img").each((index, imgElem): void => {
+      const image: HtmlImage = {
+        src: imgElem.attribs["src"],
+        alt: imgElem.attribs["alt"],
+        width: this.typedAttribute(imgElem, "width"),
+        height: this.typedAttribute(imgElem, "height"),
+        imageElem: imgElem
+      }
+      if (retain) {
+        if (retain(image)) result.push(image);
+      } else {
+        result.push(image);
+      }
+    });
+    return result;
+  }
+
   async flow(ctx: GovernedContentContext, content: GovernedContent): Promise<GovernedContent | QueryableHtmlContent> {
     if (isQueryableHtmlContent(content)) {
       // it's already queryable so don't touch it
@@ -158,27 +216,16 @@ export class EnrichQueryableHtmlContent implements ContentTransformer {
       normalizeWhitespace: true,
       decodeEntities: true,
     })
+    const self = this;
     return {
       ...content,
       htmlSource: ctx.htmlSource,
       document: document,
       anchors: (retain?: AnchorFilter): HtmlAnchor[] => {
-        const result: HtmlAnchor[] = []
-        document("a").each((index, anchorTag): void => {
-          const href = anchorTag.attribs["href"];
-          if (href) {
-            const anchor: HtmlAnchor = {
-              href: href,
-              label: document(anchorTag).text()
-            }
-            if (retain) {
-              if (retain(anchor)) result.push(anchor);
-            } else {
-              result.push(anchor);
-            }
-          }
-        });
-        return result;
+        return self.anchors(document, retain);
+      },
+      images: (retain?: ImageFilter): HtmlImage[] => {
+        return self.images(document, retain);
       }
     };
   }
