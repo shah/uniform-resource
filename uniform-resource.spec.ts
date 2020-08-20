@@ -102,4 +102,32 @@ export class TestSuite {
             Expect(resource.error).toBeDefined();
         }
     }
+
+    @Timeout(10000)
+    @Test("Download of a PDF")
+    async testDownloadPDF(): Promise<void> {
+        const followAndDownload = p.pipe(
+            ur.FollowRedirectsGranular.singleton,
+            ur.DownloadContent.singleton);
+        const resource = await ur.acquireResource({ uri: "http://ceur-ws.org/Vol-1401/paper-05.pdf", transformer: followAndDownload });
+        Expect(resource).toBeDefined();
+        Expect(ur.isDownloadFileResult(resource)).toBe(true);
+        if (ur.isDownloadFileResult(resource)) {
+            Expect(resource.downloadedFileType.mime).toBe('application/pdf');
+        }
+    }
+
+    @Timeout(10000)
+    @Test("Download an image")
+    async testDownloadImage(): Promise<void> {
+        const followAndDownload = p.pipe(
+            ur.FollowRedirectsGranular.singleton,
+            ur.DownloadContent.singleton);
+        const resource = await ur.acquireResource({ uri: "https://upload.wikimedia.org/wikipedia/en/5/54/USS_Enterprise_%28NCC-1701-A%29.jpg", transformer: followAndDownload });
+        Expect(resource).toBeDefined();
+        Expect(ur.isDownloadFileResult(resource)).toBe(true);
+        if (ur.isDownloadFileResult(resource)) {
+            Expect(resource.downloadedFileType.mime).toBe('image/jpeg');
+        }
+    }
 }
