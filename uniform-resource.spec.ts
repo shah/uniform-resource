@@ -6,13 +6,11 @@ import * as ur from "./uniform-resource";
 
 @TestFixture("Uniform Resource Test Suite")
 export class TestSuite {
-    readonly redirectVisitsCache: Cache<tru.VisitResult[]>;
     readonly resourceTrPipe: ur.UniformResourceTransformer;
 
     constructor() {
-        this.redirectVisitsCache = lruCache();
         this.resourceTrPipe = p.pipe(
-            new ur.FollowRedirectsGranular(this.redirectVisitsCache),
+            new ur.FollowRedirectsGranular(),
             ur.EnrichGovernedContent.singleton,
             ur.EnrichCuratableContent.readable);
     }
@@ -22,8 +20,8 @@ export class TestSuite {
     async testSingleValidFollowedResource(): Promise<void> {
         const resource = await ur.acquireResource({ uri: "https://t.co/ELrZmo81wI", transformer: this.resourceTrPipe });
         Expect(resource).toBeDefined();
-        Expect(ur.isFollowedResource(resource)).toBe(true);
-        if (ur.isFollowedResource(resource)) {
+        Expect(ur.isRedirectedResource(resource)).toBe(true);
+        if (ur.isRedirectedResource(resource)) {
             Expect(resource.followResults.length).toBe(5);
             Expect(tru.isTerminalTextContentResult(resource.terminalResult)).toBe(true);
             Expect(resource.uri).toBe("https://www.foxnews.com/lifestyle/photo-of-donald-trump-look-alike-in-spain-goes-viral");
@@ -104,7 +102,7 @@ export class TestSuite {
     }
 
     @Timeout(10000)
-    @Test("Download of a PDF")
+    @Test("Download a single PDF")
     async testDownloadPDF(): Promise<void> {
         const followAndDownload = p.pipe(
             ur.FollowRedirectsGranular.singleton,
@@ -118,7 +116,7 @@ export class TestSuite {
     }
 
     @Timeout(10000)
-    @Test("Download an image")
+    @Test("Download a single image")
     async testDownloadImage(): Promise<void> {
         const followAndDownload = p.pipe(
             ur.FollowRedirectsGranular.singleton,
@@ -128,6 +126,23 @@ export class TestSuite {
         Expect(ur.isDownloadFileResult(resource)).toBe(true);
         if (ur.isDownloadFileResult(resource)) {
             Expect(resource.downloadedFileType.mime).toBe('image/jpeg');
+        }
+    }
+
+    @Timeout(10000)
+    @Test("Follow multiple, download PDFs only")
+    async testDownloadOnlyPDFs(): Promise<void> {
+        const followAndDownloadOnlyPDFs = p.pipe(
+            ur.FollowRedirectsGranular.singleton,
+            ur.DownloadHttpContentTypes.pdfsOnly);
+        let resource = await ur.acquireResource({ uri: "https://upload.wikimedia.org/wikipedia/en/5/54/USS_Enterprise_%28NCC-1701-A%29.jpg", transformer: followAndDownloadOnlyPDFs });
+        Expect(resource).toBeDefined();
+        Expect(ur.isDownloadFileResult(resource)).toBe(false);
+        resource = await ur.acquireResource({ uri: "http://ceur-ws.org/Vol-1401/paper-05.pdf", transformer: followAndDownloadOnlyPDFs });
+        Expect(resource).toBeDefined();
+        Expect(ur.isDownloadFileResult(resource)).toBe(true);
+        if (ur.isDownloadFileResult(resource)) {
+            Expect(resource.downloadedFileType.mime).toBe('application/pdf');
         }
     }
 }

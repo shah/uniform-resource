@@ -453,42 +453,58 @@ export class RemoveTrackingCodesFromUrl implements UniformResourceTransformer {
   }
 }
 
-export interface FollowedResource extends TransformedResource {
+export interface FollowedResource extends UniformResource {
   readonly isFollowedResource: true;
   readonly terminalResult: tru.VisitResult;
-  readonly followResults: tru.VisitResult[];
 }
 
 export function isFollowedResource(o: any): o is FollowedResource {
   return o && "isFollowedResource" in o;
 }
 
+export interface RedirectedResource extends FollowedResource, TransformedResource {
+  readonly isRedirectedResource: true;
+  readonly followResults: tru.VisitResult[];
+}
+
+export function isRedirectedResource(o: any): o is RedirectedResource {
+  return o && "isRedirectedResource" in o;
+}
+
+
 export class FollowRedirectsGranular implements UniformResourceTransformer {
   static readonly singleton = new FollowRedirectsGranular();
 
-  constructor(readonly cache: Cache<tru.VisitResult[]> = lruCache()) {
+  constructor() {
   }
 
-  async flow(ctx: ResourceTransformerContext, resource: UniformResource): Promise<UniformResource | InvalidResource | FollowedResource> {
-    let result: UniformResource | InvalidResource | FollowedResource = resource;
-    let visitResults = this.cache[resource.uri];
-    if (!visitResults) {
-      visitResults = await tru.traverse(resource.uri);
-      this.cache[resource.uri] = visitResults;
-    }
+  async flow(ctx: ResourceTransformerContext, resource: UniformResource): Promise<UniformResource | InvalidResource | FollowedResource | RedirectedResource> {
+    let result: UniformResource | InvalidResource | FollowedResource | RedirectedResource = resource;
+    let visitResults = await tru.traverse(resource.uri);
     if (visitResults.length > 0) {
       const last = visitResults[visitResults.length - 1];
       if (tru.isTerminalResult(last)) {
-        result = {
-          ...resource,
-          pipePosition: nextTransformationPipePosition(resource),
-          transformedFromUR: resource,
-          remarks: "Followed, with " + visitResults.length + " results",
-          isFollowedResource: true,
-          followResults: visitResults,
-          uri: last.url,
-          terminalResult: last
-        };
+        if (visitResults.length > 1) {
+          result = {
+            ...resource,
+            pipePosition: nextTransformationPipePosition(resource),
+            transformedFromUR: resource,
+            remarks: "Followed, with " + visitResults.length + " results",
+            isFollowedResource: true,
+            isRedirectedResource: true,
+            followResults: visitResults,
+            uri: last.url,
+            terminalResult: last
+          }
+        } else {
+          result = {
+            ...resource,
+            isFollowedResource: true,
+            uri: last.url,
+            terminalResult: last
+          }
+
+        }
       } else if (tru.isVisitError(last)) {
         result = {
           isInvalidResource: true,
@@ -504,6 +520,7 @@ export class FollowRedirectsGranular implements UniformResourceTransformer {
 
 export interface DownloadAttemptResult {
   readonly isDownloadAttemptResult: true;
+  readonly sizeExpected: number;
 }
 
 export function isDownloadAttemptResult(o: any): o is DownloadAttemptResult {
@@ -519,6 +536,7 @@ export function isDownloadSkipResult(o: any): o is DownloadSkipResult {
 }
 
 export interface DownloadErrorResult extends DownloadAttemptResult {
+  readonly sizeDownloaded: number;
   readonly downloadError: Error;
 }
 
@@ -529,6 +547,7 @@ export function isDownloadErrorResult(o: any): o is DownloadErrorResult {
 export interface DownloadSuccessResult extends DownloadAttemptResult {
   readonly downloadDestPath: string;
   readonly contentDisposition?: contentDisposition.ContentDisposition;
+  readonly downloadedFileStats: fs.Stats;
 }
 
 export function isDownloadSuccessResult(o: any): o is DownloadSuccessResult {
@@ -543,11 +562,12 @@ export function isDownloadFileResult(o: any): o is DownloadFileResult {
   return o && "downloadDestPath" in o && "downloadedFileType" in o;
 }
 
-export interface DownloadIdeterminateFileResult extends DownloadSuccessResult {
+export interface DownloadIndeterminateFileResult extends DownloadSuccessResult {
   readonly unknownFileType: string;
+  readonly downloadedFileStats: fs.Stats;
 }
 
-export function isDownloadIdeterminateFileResult(o: any): o is DownloadIdeterminateFileResult {
+export function isDownloadIdeterminateFileResult(o: any): o is DownloadIndeterminateFileResult {
   return o && "unknownFileType" in o && "downloadedFileType" in o;
 }
 
@@ -583,9 +603,15 @@ export class TypicalDownloader implements Downloader, TypicalDownloaderOptions {
     return fs.createWriteStream(path.join(this.destPath, uuidv4()));
   }
 
-  async finalize(dc: DownloadContent, resource: FollowedResource, writer: Writable): Promise<DownloadSuccessResult | DownloadFileResult | DownloadIdeterminateFileResult> {
+  async finalize(dc: DownloadContent, resource: FollowedResource, writer: Writable): Promise<DownloadSuccessResult | DownloadFileResult | DownloadIndeterminateFileResult> {
     const dfs = writer as fs.WriteStream;
     const downloadDestPath = dfs.path as string;
+    let sizeExpected = -1;
+    if (tru.isTerminalResult(resource.terminalResult)) {
+      const sizeHeader = resource.terminalResult.httpResponse.headers.get("Content-Length");
+      if (sizeHeader) sizeExpected = parseInt(sizeHeader);
+    }
+    const stats = fs.statSync(downloadDestPath);
     if (this.determineFileType) {
       let cd: contentDisposition.ContentDisposition | undefined = undefined;
       if (tru.isTerminalResult(resource.terminalResult)) {
@@ -600,6 +626,8 @@ export class TypicalDownloader implements Downloader, TypicalDownloaderOptions {
         fs.renameSync(downloadDestPath, finalFileName);
         return {
           isDownloadAttemptResult: true,
+          sizeExpected: sizeExpected,
+          downloadedFileStats: stats,
           downloadDestPath: finalFileName,
           downloadedFileType: fileType,
           contentDisposition: cd
@@ -609,13 +637,17 @@ export class TypicalDownloader implements Downloader, TypicalDownloaderOptions {
           isDownloadAttemptResult: true,
           downloadDestPath: downloadDestPath,
           unknownFileType: "Unable to determine type of file " + downloadDestPath,
-          contentDisposition: cd
+          contentDisposition: cd,
+          sizeExpected: sizeExpected,
+          downloadedFileStats: stats
         }
       }
     }
     return {
       isDownloadAttemptResult: true,
-      downloadDestPath: downloadDestPath
+      downloadDestPath: downloadDestPath,
+      sizeExpected: sizeExpected,
+      downloadedFileStats: stats
     }
   }
 }
@@ -657,6 +689,28 @@ export class DownloadContent implements UniformResourceTransformer {
     };
   }
 }
+
+export class DownloadHttpContentTypes implements UniformResourceTransformer {
+  static readonly pdfsOnly = new DownloadHttpContentTypes(DownloadContent.singleton, "application/pdf");
+  readonly contentTypes: string[];
+
+  constructor(readonly wrapperDC: DownloadContent, ...contentTypes: string[]) {
+    this.contentTypes = contentTypes;
+  }
+
+  async flow(ctx: ResourceTransformerContext, resource: UniformResource): Promise<UniformResource | (UniformResource & (DownloadSkipResult | DownloadErrorResult | DownloadSuccessResult))> {
+    if (isFollowedResource(resource)) {
+      const visitResult = resource.terminalResult;
+      if (tru.isTerminalResult(visitResult)) {
+        if (this.contentTypes.find(contentType => contentType == visitResult.contentType)) {
+          return this.wrapperDC.flow(ctx, resource);
+        }
+      }
+    }
+    return resource;
+  }
+}
+
 
 export class EnrichGovernedContent implements UniformResourceTransformer {
   static readonly singleton = new EnrichGovernedContent();
