@@ -143,20 +143,22 @@ export class TestSuite {
     @Timeout(10000)
     @Test("Download curatable content Fav Icon")
     async testFavIcon(): Promise<void> {
-        const resource = await ur.acquireResource({ uri: "https://t.co/ELrZmo81wI", transformer: this.resourceTrPipe });
+        const trPipe = p.pipe(
+            new ur.FollowRedirectsGranular(),
+            ur.EnrichGovernedContent.singleton,
+            ur.EnrichCuratableContent.standard,
+            ur.FavIconResource.followAndDownload);
+
+        const resource = await ur.acquireResource({ uri: "https://t.co/ELrZmo81wI", transformer: trPipe });
         Expect(resource).toBeDefined();
         Expect(ur.isCuratableContentResource(resource)).toBe(true);
-        if (ur.isCuratableContentResource(resource)) {
-            Expect(resource.favIconURL).toBe("http://www.google.com/s2/favicons?domain=www.foxnews.com");
-
-            const followAndDownload = p.pipe(
-                ur.FollowRedirectsGranular.singleton,
-                ur.DownloadContent.singleton);
-            const favIconResource = await ur.acquireResource({ uri: resource.favIconURL, transformer: followAndDownload });
+        Expect(ur.isFavIconSupplier(resource)).toBe(true);
+        if (ur.isFavIconSupplier(resource)) {
+            const favIconResource = resource.favIconResource;
             Expect(favIconResource).toBeDefined();
             Expect(ur.isDownloadFileResult(favIconResource)).toBe(true);
             if (ur.isDownloadFileResult(favIconResource)) {
-                Expect(favIconResource.downloadedFileType.mime).toBe('image/png');
+                Expect(favIconResource.downloadedFileType.mime).toBe('image/x-icon');
             }
         }
     }

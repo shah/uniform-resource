@@ -100,6 +100,13 @@ export interface ImageFilter {
   (retain: HtmlImage): boolean;
 }
 
+export interface PageIcon {
+  readonly name: string;
+  readonly type: string;
+  readonly href: string;
+  readonly sizes: string;
+}
+
 export type UntypedObject = any;
 
 export interface UntypedObjectFilter {
@@ -121,6 +128,7 @@ export interface QueryableHtmlContent extends GovernedContent {
   readonly anchors: (retain?: AnchorFilter) => HtmlAnchor[];
   readonly images: (retain?: ImageFilter) => HtmlImage[];
   readonly uptypedSchemas: (unwrapGraph: boolean, retain?: UntypedObjectFilter) => UntypedObject[] | undefined;
+  readonly pageIcons: () => PageIcon[];
 }
 
 export function isQueryableHtmlContent(o: any): o is QueryableHtmlContent {
@@ -132,6 +140,7 @@ export interface OpenGraph {
   title?: ContentTitle;
   description?: ContentAbstract;
   imageURL?: string;
+  keywords?: string[];
 }
 
 export interface TwitterCard {
@@ -163,6 +172,16 @@ export function isTransformedContent(o: any): o is TransformedContent {
 
 export interface ContentTransformer extends p.PipeUnion<GovernedContentContext, GovernedContent> {
 }
+
+const pageIconSelectors = [
+  ["defaultIcon", "link[rel='icon']"],
+  ["shortcutIcon", "link[rel='shortcut icon']"],
+  ["appleTouchIcon", "link[rel='apple-touch-icon']"],
+  ["appleTouchIconPrecomposed", "link[rel='apple-touch-icon-precomposed']"],
+  ["appleTouchStartupImage", "link[rel='apple-touch-startup-image']"],
+  ["maskIcon", "link[rel='mask-icon']"],
+  ["fluidIcon", "link[rel='fluid-icon']"],
+];
 
 export class EnrichQueryableHtmlContent implements ContentTransformer {
   static readonly singleton = new EnrichQueryableHtmlContent();
@@ -240,6 +259,25 @@ export class EnrichQueryableHtmlContent implements ContentTransformer {
     return result;
   }
 
+  pageIcons(document: CheerioStatic): PageIcon[] {
+    const result: PageIcon[] = [];
+    pageIconSelectors.forEach((selector) => {
+      document(selector[1]).each((i, linkElem) => {
+        const { href, sizes, type } = linkElem.attribs;
+        if (href && href !== '#') {
+          const icon = {
+            name: selector[0],
+            sizes,
+            href,
+            type,
+          };
+          result.push(icon);
+        }
+      });
+    });
+    return result;
+  }
+
   async flow(ctx: GovernedContentContext, content: GovernedContent): Promise<GovernedContent | QueryableHtmlContent> {
     if (isQueryableHtmlContent(content)) {
       // it's already queryable so don't touch it
@@ -250,6 +288,8 @@ export class EnrichQueryableHtmlContent implements ContentTransformer {
     const document = cheerio.load(ctx.htmlSource, {
       normalizeWhitespace: true,
       decodeEntities: true,
+      lowerCaseTags: true,
+      lowerCaseAttributeNames: true,
     })
     const self = this;
     return {
@@ -264,7 +304,10 @@ export class EnrichQueryableHtmlContent implements ContentTransformer {
       },
       uptypedSchemas: (unwrapGraph: boolean, retain?: UntypedObjectFilter): UntypedObject[] | undefined => {
         return self.untypedSchemas(document, unwrapGraph, retain);
-      }
+      },
+      pageIcons: (): PageIcon[] => {
+        return self.pageIcons(document);
+      },
       // schema: <T extends Thing>(): T | undefined => {
       //   return self.schemas<T>(document);
       // }
@@ -285,6 +328,7 @@ export class BuildCuratableContent implements ContentTransformer {
       'og:title': (v: string) => { og.title = v },
       'og:description': (v: string) => { og.description = v },
       'og:image': (v: string) => { og.imageURL = v },
+      'og:keywords': (v: string) => { og.keywords = v.split(",").map(kw => kw.trim()) },
       'twitter:title': (v: string) => { tc.title = v },
       'twitter:image': (v: string) => { tc.imageURL = v },
       'twitter:description': (v: string) => { tc.description = v },
@@ -423,7 +467,7 @@ export class EnrichMozillaReadabilityContent implements ContentTransformer {
  ************************************/
 
 export interface ResourceTransformerContext {
-
+  readonly fetchTimeOut?: number;
 }
 
 export interface TransformedResource extends UniformResource {
@@ -496,6 +540,7 @@ export class RemoveTrackingCodesFromUrl implements UniformResourceTransformer {
 
 export interface FollowedResource extends UniformResource {
   readonly isFollowedResource: true;
+  readonly URL: url.URL;
   readonly terminalResult: tru.VisitResult;
 }
 
@@ -512,16 +557,18 @@ export function isRedirectedResource(o: any): o is RedirectedResource {
   return o && "isRedirectedResource" in o;
 }
 
-
 export class FollowRedirectsGranular implements UniformResourceTransformer {
   static readonly singleton = new FollowRedirectsGranular();
 
-  constructor() {
+  constructor(readonly fetchTimeOut?: number) {
   }
 
   async flow(ctx: ResourceTransformerContext, resource: UniformResource): Promise<UniformResource | InvalidResource | FollowedResource | RedirectedResource> {
     let result: UniformResource | InvalidResource | FollowedResource | RedirectedResource = resource;
-    let visitResults = await tru.traverse(resource.uri);
+    let traveseOptions = new tru.TypicalTraverseOptions({
+      fetchTimeOut: ctx.fetchTimeOut || this.fetchTimeOut || 5000
+    });
+    let visitResults = await tru.traverse(resource.uri, traveseOptions);
     if (visitResults.length > 0) {
       const last = visitResults[visitResults.length - 1];
       if (tru.isTerminalResult(last)) {
@@ -535,6 +582,7 @@ export class FollowRedirectsGranular implements UniformResourceTransformer {
             isRedirectedResource: true,
             followResults: visitResults,
             uri: last.url,
+            URL: new url.URL(last.url),
             terminalResult: last
           }
         } else {
@@ -542,6 +590,7 @@ export class FollowRedirectsGranular implements UniformResourceTransformer {
             ...resource,
             isFollowedResource: true,
             uri: last.url,
+            URL: new url.URL(last.url),
             terminalResult: last
           }
 
@@ -752,7 +801,6 @@ export class DownloadHttpContentTypes implements UniformResourceTransformer {
   }
 }
 
-
 export class EnrichGovernedContent implements UniformResourceTransformer {
   static readonly singleton = new EnrichGovernedContent();
 
@@ -770,9 +818,40 @@ export class EnrichGovernedContent implements UniformResourceTransformer {
   }
 }
 
+export interface FavIconSupplier {
+  readonly favIconResource: UniformResource;
+}
+
+export function isFavIconSupplier(o: any): o is FavIconSupplier {
+  return o && "favIconResource" in o;
+}
+
+export class FavIconResource implements UniformResourceTransformer {
+  static readonly followOnly = new FavIconResource(p.pipe(FollowRedirectsGranular.singleton));
+  static readonly followAndDownload = new FavIconResource(p.pipe(FollowRedirectsGranular.singleton, DownloadContent.singleton));
+
+  constructor(readonly transformer: UniformResourceTransformer) {
+
+  }
+
+  async flow(ctx: ResourceTransformerContext, resource: UniformResource): Promise<UniformResource | (UniformResource & FavIconSupplier)> {
+    const favIconURL = new URL(resource.uri);
+    favIconURL.pathname = '/favicon.ico';
+    const fir = await acquireResource({
+      uri: favIconURL.href,
+      transformer: this.transformer,
+      provenance: { provenanceURN: resource.uri },
+    })
+    return {
+      ...resource,
+      favIconResource: fir
+    };
+  }
+}
+
 export interface CuratableContentResource extends UniformResource {
   readonly curatableContent: CuratableContent;
-  readonly favIconURL: string;
+  readonly domainBrand: string;
 }
 
 export function isCuratableContentResource(o: any): o is CuratableContentResource {
@@ -803,11 +882,10 @@ export class EnrichCuratableContent implements UniformResourceTransformer {
         contentType: textResult.contentType,
         mimeType: textResult.mimeType
       });
-      const URL = new url.URL(resource.uri);
       result = {
         ...resource,
         curatableContent: content as CuratableContent,
-        favIconURL: `http://www.google.com/s2/favicons?domain=${URL.hostname}`
+        domainBrand: resource.URL.hostname.replace(/^www\./, "")
       };
     }
     return result;
@@ -824,7 +902,7 @@ export interface AcquireResourceOptions {
 export async function acquireResource({ uri, label, provenance, transformer }: AcquireResourceOptions): Promise<UniformResource> {
   let result: UniformResource = {
     isUniformResource: true,
-    provenance: provenance || { provenanceURN: "unkown" },
+    provenance: provenance || { provenanceURN: "unknown" },
     uri: uri,
     label: label
   };
