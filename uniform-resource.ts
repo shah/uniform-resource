@@ -10,6 +10,7 @@ import { Writable } from 'stream';
 import * as util from 'util';
 import { v4 as uuidv4 } from 'uuid';
 import mime from "whatwg-mimetype";
+import url from "url";
 
 const streamPipeline = util.promisify(require('stream').pipeline);
 
@@ -771,6 +772,7 @@ export class EnrichGovernedContent implements UniformResourceTransformer {
 
 export interface CuratableContentResource extends UniformResource {
   readonly curatableContent: CuratableContent;
+  readonly favIconURL: string;
 }
 
 export function isCuratableContentResource(o: any): o is CuratableContentResource {
@@ -801,9 +803,11 @@ export class EnrichCuratableContent implements UniformResourceTransformer {
         contentType: textResult.contentType,
         mimeType: textResult.mimeType
       });
+      const URL = new url.URL(resource.uri);
       result = {
         ...resource,
         curatableContent: content as CuratableContent,
+        favIconURL: `http://www.google.com/s2/favicons?domain=${URL.hostname}`
       };
     }
     return result;

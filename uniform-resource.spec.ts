@@ -141,6 +141,27 @@ export class TestSuite {
     }
 
     @Timeout(10000)
+    @Test("Download curatable content Fav Icon")
+    async testFavIcon(): Promise<void> {
+        const resource = await ur.acquireResource({ uri: "https://t.co/ELrZmo81wI", transformer: this.resourceTrPipe });
+        Expect(resource).toBeDefined();
+        Expect(ur.isCuratableContentResource(resource)).toBe(true);
+        if (ur.isCuratableContentResource(resource)) {
+            Expect(resource.favIconURL).toBe("http://www.google.com/s2/favicons?domain=www.foxnews.com");
+
+            const followAndDownload = p.pipe(
+                ur.FollowRedirectsGranular.singleton,
+                ur.DownloadContent.singleton);
+            const favIconResource = await ur.acquireResource({ uri: resource.favIconURL, transformer: followAndDownload });
+            Expect(favIconResource).toBeDefined();
+            Expect(ur.isDownloadFileResult(favIconResource)).toBe(true);
+            if (ur.isDownloadFileResult(favIconResource)) {
+                Expect(favIconResource.downloadedFileType.mime).toBe('image/png');
+            }
+        }
+    }
+
+    @Timeout(10000)
     @Test("Download a single image")
     async testDownloadImage(): Promise<void> {
         const followAndDownload = p.pipe(
