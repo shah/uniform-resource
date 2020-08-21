@@ -318,22 +318,16 @@ export class EnrichQueryableHtmlContent implements ContentTransformer {
 export class BuildCuratableContent implements ContentTransformer {
   static readonly singleton = new BuildCuratableContent();
 
-  parseSocialGraph(ctx: GovernedContentContext, document: CheerioStatic): SocialGraph {
-    let og: OpenGraph = {};
-    let tc: TwitterCard = {};
+  parseOpenGraph(ctx: GovernedContentContext, document: CheerioStatic): OpenGraph {
+    let result: OpenGraph = {};
     const metaTransformers: {
       [key: string]: (v: string) => void;
     } = {
-      'og:type': (v: string) => { og.type = v },
-      'og:title': (v: string) => { og.title = v },
-      'og:description': (v: string) => { og.description = v },
-      'og:image': (v: string) => { og.imageURL = v },
-      'og:keywords': (v: string) => { og.keywords = v.split(",").map(kw => kw.trim()) },
-      'twitter:title': (v: string) => { tc.title = v },
-      'twitter:image': (v: string) => { tc.imageURL = v },
-      'twitter:description': (v: string) => { tc.description = v },
-      'twitter:site': (v: string) => { tc.site = v },
-      'twitter:creator': (v: string) => { tc.creator = v },
+      'og:type': (v: string) => { result.type = v },
+      'og:title': (v: string) => { result.title = v },
+      'og:description': (v: string) => { result.description = v },
+      'og:image': (v: string) => { result.imageURL = v },
+      'og:keywords': (v: string) => { result.keywords = v.split(",").map(kw => kw.trim()) },
     };
     const meta = document('meta') as any;
     const keys = Object.keys(meta);
@@ -346,6 +340,37 @@ export class BuildCuratableContent implements ContentTransformer {
         }
       })
     }
+    return result;
+  }
+
+  parseTwitterCard(ctx: GovernedContentContext, document: CheerioStatic): TwitterCard {
+    let result: TwitterCard = {};
+    const metaTransformers: {
+      [key: string]: (v: string) => void;
+    } = {
+      'twitter:title': (v: string) => { result.title = v },
+      'twitter:image': (v: string) => { result.imageURL = v },
+      'twitter:description': (v: string) => { result.description = v },
+      'twitter:site': (v: string) => { result.site = v },
+      'twitter:creator': (v: string) => { result.creator = v },
+    };
+    const meta = document('meta') as any;
+    const keys = Object.keys(meta);
+    for (const outerKey in metaTransformers) {
+      keys.forEach(function (innerKey) {
+        if (meta[innerKey].attribs
+          && meta[innerKey].attribs.name
+          && meta[innerKey].attribs.name === outerKey) {
+          metaTransformers[outerKey](meta[innerKey].attribs.content);
+        }
+      })
+    }
+    return result;
+  }
+
+  parseSocialGraph(ctx: GovernedContentContext, document: CheerioStatic): SocialGraph {
+    const og = this.parseOpenGraph(ctx, document);
+    const tc = this.parseTwitterCard(ctx, document);
     const result: { [key: string]: any } = {};
     if (Object.keys(og).length > 0) result.openGraph = og;
     if (Object.keys(tc).length > 0) result.twitter = tc;

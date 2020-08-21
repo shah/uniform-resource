@@ -66,8 +66,8 @@ export class TestSuite {
     }
 
     @Timeout(10000)
-    @Test("Test a single, valid, UniformResourceContent")
-    async testSingleValidResourceContent(): Promise<void> {
+    @Test("Test a single, valid, UniformResourceContent with OpenGraph")
+    async testSingleValidResourceOpenGraph(): Promise<void> {
         const resource = await ur.acquireResource({ uri: "https://t.co/ELrZmo81wI", transformer: this.resourceTrPipe });
         Expect(resource).toBeDefined();
         Expect(ur.isCuratableContentResource(resource)).toBe(true);
@@ -79,6 +79,22 @@ export class TestSuite {
                 Expect(sg.openGraph).toBeDefined();
                 Expect(sg.openGraph?.type).toBe("article");
                 Expect(sg.openGraph?.title).toBe(resource.curatableContent.title);
+            }
+        }
+    }
+
+    @Timeout(10000)
+    @Test("Test a single, valid, UniformResourceContent for Twitter title")
+    async testSingleValidResourceTwitter(): Promise<void> {
+        const resource = await ur.acquireResource({ uri: "https://www.impactbnd.com/blog/best-seo-news-sites", transformer: this.resourceTrPipe });
+        Expect(resource).toBeDefined();
+        Expect(ur.isCuratableContentResource(resource)).toBe(true);
+        if (ur.isCuratableContentResource(resource)) {
+            Expect(resource.curatableContent.socialGraph).toBeDefined();
+            if (resource.curatableContent.socialGraph) {
+                const sg = resource.curatableContent.socialGraph;
+                Expect(sg.twitter).toBeDefined();
+                Expect(sg.twitter?.title).toBe(resource.curatableContent.title);
             }
         }
     }
