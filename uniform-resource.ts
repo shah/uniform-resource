@@ -1,16 +1,15 @@
 import * as tru from "@shah/traverse-urls";
-import { Cache, lruCache } from "@shah/ts-cache";
 import * as p from "@shah/ts-pipe";
 import cheerio from "cheerio";
+import contentDisposition from "content-disposition";
+import ft from "file-type";
 import * as fs from 'fs';
+import os from "os";
+import path from "path";
 import { Writable } from 'stream';
 import * as util from 'util';
-import mime from "whatwg-mimetype";
-import path from "path";
-import os from "os";
 import { v4 as uuidv4 } from 'uuid';
-import ft from "file-type";
-import contentDisposition from "content-disposition";
+import mime from "whatwg-mimetype";
 
 const streamPipeline = util.promisify(require('stream').pipeline);
 
@@ -100,6 +99,12 @@ export interface ImageFilter {
   (retain: HtmlImage): boolean;
 }
 
+export type UntypedObject = any;
+
+export interface UntypedObjectFilter {
+  (retain: UntypedObject): boolean;
+}
+
 export interface CuratableContent extends GovernedContent {
   readonly title: ContentTitle;
   readonly socialGraph: SocialGraph;
@@ -114,6 +119,7 @@ export interface QueryableHtmlContent extends GovernedContent {
   readonly document: CheerioStatic;
   readonly anchors: (retain?: AnchorFilter) => HtmlAnchor[];
   readonly images: (retain?: ImageFilter) => HtmlImage[];
+  readonly uptypedSchemas: (unwrapGraph: boolean, retain?: UntypedObjectFilter) => UntypedObject[] | undefined;
 }
 
 export function isQueryableHtmlContent(o: any): o is QueryableHtmlContent {
@@ -205,6 +211,34 @@ export class EnrichQueryableHtmlContent implements ContentTransformer {
     return result;
   }
 
+  untypedSchemas(document: CheerioStatic, unwrapGraph: boolean, retain?: UntypedObjectFilter): UntypedObject[] | undefined {
+    const result: UntypedObject[] = [];
+    document('script[type="application/ld+json"]').each((index, scriptElem): void => {
+      const script = scriptElem.children[0].data;
+      if (script) {
+        const ldJSON: UntypedObject = JSON.parse(script);
+        if (ldJSON["@graph"]) {
+          if (unwrapGraph) {
+            for (const node of ldJSON["@graph"]) {
+              if (retain) {
+                if (retain(node)) result.push(node);
+              } else {
+                result.push(node);
+              }
+            }
+            return;
+          }
+        }
+        if (retain) {
+          if (retain(ldJSON)) result.push(ldJSON);
+        } else {
+          result.push(ldJSON);
+        }
+      }
+    });
+    return result;
+  }
+
   async flow(ctx: GovernedContentContext, content: GovernedContent): Promise<GovernedContent | QueryableHtmlContent> {
     if (isQueryableHtmlContent(content)) {
       // it's already queryable so don't touch it
@@ -226,7 +260,13 @@ export class EnrichQueryableHtmlContent implements ContentTransformer {
       },
       images: (retain?: ImageFilter): HtmlImage[] => {
         return self.images(document, retain);
+      },
+      uptypedSchemas: (unwrapGraph: boolean, retain?: UntypedObjectFilter): UntypedObject[] | undefined => {
+        return self.untypedSchemas(document, unwrapGraph, retain);
       }
+      // schema: <T extends Thing>(): T | undefined => {
+      //   return self.schemas<T>(document);
+      // }
     };
   }
 }

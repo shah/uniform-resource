@@ -1,8 +1,8 @@
 import * as tru from "@shah/traverse-urls";
-import { Cache, lruCache } from "@shah/ts-cache";
 import * as p from "@shah/ts-pipe";
 import { Expect, Test, TestFixture, Timeout } from "alsatian";
 import * as ur from "./uniform-resource";
+import { Article, Organization } from "schema-dts"
 
 @TestFixture("Uniform Resource Test Suite")
 export class TestSuite {
@@ -37,6 +37,31 @@ export class TestSuite {
         if (ur.isGovernedContent(resource)) {
             Expect(resource.contentType).toBe("text/html; charset=utf-8");
             Expect(resource.mimeType.essence).toBe("text/html");
+        }
+    }
+
+    @Timeout(10000)
+    @Test("Test a ld+json schemas")
+    async testLdJsonSchemas(): Promise<void> {
+        const tr = p.pipe(new ur.FollowRedirectsGranular(), ur.EnrichCuratableContent.standard);
+        const resource = await ur.acquireResource({ uri: "https://nystudio107.com/blog/annotated-json-ld-structured-data-examples", transformer: this.resourceTrPipe });
+        Expect(resource).toBeDefined();
+        Expect(ur.isCuratableContentResource(resource)).toBe(true);
+        if (ur.isCuratableContentResource(resource)) {
+            const cc = resource.curatableContent;
+            Expect(ur.isQueryableHtmlContent(cc)).toBe(true);
+            if (ur.isQueryableHtmlContent(cc)) {
+                const schemas = cc.uptypedSchemas(true);
+                Expect(schemas).toBeDefined();
+                Expect(schemas?.length).toBe(4);
+                if (schemas && schemas[0]) {
+                    // create a type-safe version of article
+                    Expect(schemas[0]["@type"]).toBe("Article");
+                    const article = schemas[0] as Article;
+                    const org = schemas[1] as Organization;
+                    //console.dir(article);
+                }
+            }
         }
     }
 
