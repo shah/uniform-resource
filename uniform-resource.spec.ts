@@ -109,7 +109,6 @@ export class TestSuite {
             Expect(ur.isQueryableHtmlContent(resource.curatableContent)).toBe(true);
             if (ur.isQueryableHtmlContent(resource.curatableContent)) {
                 Expect(resource.curatableContent.meta()).toBeDefined();
-                console.dir(resource.curatableContent.meta());
             }
         }
     }
