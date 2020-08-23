@@ -107,6 +107,13 @@ export interface PageIcon {
   readonly sizes: string;
 }
 
+export class HtmlMeta {
+  [key: string]: any;
+}
+
+export interface HtmlMetaConsumer extends p.PipeUnion<HtmlMetaConsumerContext, HtmlMeta> {
+}
+
 export type UntypedObject = any;
 
 export interface UntypedObjectFilter {
@@ -129,6 +136,7 @@ export interface QueryableHtmlContent extends GovernedContent {
   readonly images: (retain?: ImageFilter) => HtmlImage[];
   readonly uptypedSchemas: (unwrapGraph: boolean, retain?: UntypedObjectFilter) => UntypedObject[] | undefined;
   readonly pageIcons: () => PageIcon[];
+  readonly meta: (consumer?: HtmlMetaConsumer) => HtmlMeta;
 }
 
 export function isQueryableHtmlContent(o: any): o is QueryableHtmlContent {
@@ -182,6 +190,25 @@ const pageIconSelectors = [
   ["maskIcon", "link[rel='mask-icon']"],
   ["fluidIcon", "link[rel='fluid-icon']"],
 ];
+
+export interface HtmlMetaConsumerContext {
+  readonly document: CheerioStatic;
+}
+
+export class ConsumeHtmlMeta implements HtmlMetaConsumer {
+  static readonly nameAndPropertyOnly = new ConsumeHtmlMeta();
+
+  async flow(ctx: HtmlMetaConsumerContext, meta: HtmlMeta): Promise<HtmlMeta> {
+    ctx.document("meta").each((index, metaElem): void => {
+      const name = metaElem.attribs["name"];
+      const property = metaElem.attribs["property"];
+      if (name || property) {
+        meta[name || property] = metaElem.attribs["content"];
+      }
+    });
+    return meta;
+  }
+}
 
 export class EnrichQueryableHtmlContent implements ContentTransformer {
   static readonly singleton = new EnrichQueryableHtmlContent();
@@ -278,6 +305,10 @@ export class EnrichQueryableHtmlContent implements ContentTransformer {
     return result;
   }
 
+  meta(document: CheerioStatic, consumer: HtmlMetaConsumer = ConsumeHtmlMeta.nameAndPropertyOnly): HtmlMeta {
+    return consumer.flow({ document: document }, {});
+  }
+
   async flow(ctx: GovernedContentContext, content: GovernedContent): Promise<GovernedContent | QueryableHtmlContent> {
     if (isQueryableHtmlContent(content)) {
       // it's already queryable so don't touch it
@@ -308,9 +339,9 @@ export class EnrichQueryableHtmlContent implements ContentTransformer {
       pageIcons: (): PageIcon[] => {
         return self.pageIcons(document);
       },
-      // schema: <T extends Thing>(): T | undefined => {
-      //   return self.schemas<T>(document);
-      // }
+      meta: (consumer?: HtmlMetaConsumer): HtmlMeta => {
+        return this.meta(document, consumer);
+      }
     };
   }
 }
@@ -837,6 +868,74 @@ export class EnrichGovernedContent implements UniformResourceTransformer {
         ...resource,
         contentType: textResult.contentType,
         mimeType: textResult.mimeType
+      };
+    }
+    return result;
+  }
+}
+
+export class MetascraperResults {
+  [key: string]: any;
+}
+
+export interface MetascraperResultsSupplier {
+  readonly metascraperResults: MetascraperResults;
+}
+
+export function isMetascraperResultsSupplier(o: any): o is MetascraperResultsSupplier {
+  return o && "metascraperResults" in o;
+}
+
+const metascraperRulesCommon = require('metascraper')([
+  require('metascraper-author')(),
+  require('metascraper-date')(),
+  require('metascraper-description')(),
+  require('metascraper-image')(),
+  require('metascraper-logo')(),
+  require('metascraper-logo-favicon')(),
+  require('metascraper-clearbit')(),
+  require('metascraper-publisher')(),
+  require('metascraper-title')(),
+]);
+
+const metascraperRulesAll = require('metascraper')([
+  require('metascraper-audio')(),
+  require('metascraper-author')(),
+  require('metascraper-date')(),
+  require('metascraper-description')(),
+  require('metascraper-image')(),
+  require('metascraper-logo')(),
+  require('metascraper-logo-favicon')(),
+  require('metascraper-media-provider')(),
+  require('metascraper-clearbit')(),
+  require('metascraper-publisher')(),
+  require('metascraper-spotify')(),
+  require('metascraper-title')(),
+  require('metascraper-url')(),
+  require('metascraper-video')(),
+  require('metascraper-youtube')()
+]);
+
+export class EnrichMetascraperResults implements UniformResourceTransformer {
+  static readonly commonRules = new EnrichMetascraperResults(metascraperRulesCommon);
+  static readonly allRules = new EnrichMetascraperResults(metascraperRulesAll);
+
+  constructor(readonly metascraperInstance: any) {
+  }
+
+  async flow(ctx: ResourceTransformerContext, resource: UniformResource): Promise<UniformResource | (UniformResource & MetascraperResultsSupplier)> {
+    let result: UniformResource | (UniformResource & MetascraperResultsSupplier) = resource;
+    if (isFollowedResource(resource) && tru.isTerminalTextContentResult(resource.terminalResult)) {
+      // TODO should we check if mimeType is text/html?
+      const textResult = resource.terminalResult;
+      result = {
+        ...resource,
+        // This is expensive since we're creating a second copy of cheerio for Metascraper
+        // but Metascraper needs its own, decorated, HTML DOM.
+        metascraperResults: await this.metascraperInstance({
+          html: resource.terminalResult.contentText,
+          url: resource.uri
+        }),
       };
     }
     return result;

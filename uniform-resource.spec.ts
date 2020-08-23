@@ -100,6 +100,33 @@ export class TestSuite {
     }
 
     @Timeout(10000)
+    @Test("Test a single, valid, UniformResourceContent for simple HTML page meta data")
+    async testSimplePageMetaData(): Promise<void> {
+        const resource = await ur.acquireResource({ uri: "https://www.foxnews.com/lifestyle/photo-of-donald-trump-look-alike-in-spain-goes-viral", transformer: this.resourceTrPipe });
+        Expect(resource).toBeDefined();
+        Expect(ur.isCuratableContentResource(resource)).toBe(true);
+        if (ur.isCuratableContentResource(resource)) {
+            Expect(ur.isQueryableHtmlContent(resource.curatableContent)).toBe(true);
+            if (ur.isQueryableHtmlContent(resource.curatableContent)) {
+                Expect(resource.curatableContent.meta()).toBeDefined();
+                console.dir(resource.curatableContent.meta());
+            }
+        }
+    }
+
+    @Timeout(45000)
+    @Test("Test a single, valid, UniformResourceContent for Metascraper meta data")
+    async testMetascraperResults(): Promise<void> {
+        const tr = p.pipe(new ur.FollowRedirectsGranular(), ur.EnrichMetascraperResults.commonRules);
+        const resource = await ur.acquireResource({ uri: "https://www.foxnews.com/lifestyle/photo-of-donald-trump-look-alike-in-spain-goes-viral", transformer: tr });
+        Expect(resource).toBeDefined();
+        Expect(ur.isMetascraperResultsSupplier(resource)).toBe(true);
+        if (ur.isMetascraperResultsSupplier(resource)) {
+            Expect(resource.metascraperResults).toBeDefined();
+        }
+    }
+
+    @Timeout(10000)
     @Test("Test a single, valid, readable content resource")
     async testSingleValidReadableContent(): Promise<void> {
         const resource = await ur.acquireResource({ uri: "https://t.co/ELrZmo81wI", transformer: this.resourceTrPipe });
