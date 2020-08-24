@@ -1,24 +1,33 @@
+import * as qc from "@shah/queryable-content";
 import * as tru from "@shah/traverse-urls";
 import * as p from "@shah/ts-pipe";
 import { Expect, Test, TestFixture, Timeout } from "alsatian";
+import { Article, Organization } from "schema-dts";
 import * as ur from "./uniform-resource";
-import { Article, Organization } from "schema-dts"
 
 @TestFixture("Uniform Resource Test Suite")
 export class TestSuite {
-    readonly resourceTrPipe: ur.UniformResourceTransformer;
+    readonly resourceTrPipeStd: ur.UniformResourceTransformer;
+    readonly resourceTrPipeReadable: ur.UniformResourceTransformer;
 
     constructor() {
-        this.resourceTrPipe = p.pipe(
+        this.resourceTrPipeStd = p.pipe(
             new ur.FollowRedirectsGranular(),
             ur.EnrichGovernedContent.singleton,
-            ur.EnrichCuratableContent.readable);
+            ur.EnrichCuratableContent.singleton);
+
+        this.resourceTrPipeReadable = p.pipe(
+            new ur.FollowRedirectsGranular(),
+            ur.EnrichGovernedContent.singleton,
+            ur.EnrichCuratableContent.singleton,
+            ur.EnrichMercuryReadableContent.singleton,
+            ur.EnrichMozillaReadabilityContent.singleton);
     }
 
     @Timeout(10000)
     @Test("Test a single, valid, redirected (traversed/followed) resource")
     async testSingleValidFollowedResource(): Promise<void> {
-        const resource = await ur.acquireResource({ uri: "https://t.co/ELrZmo81wI", transformer: this.resourceTrPipe });
+        const resource = await ur.acquireResource({ uri: "https://t.co/ELrZmo81wI", transformer: this.resourceTrPipeStd });
         Expect(resource).toBeDefined();
         Expect(ur.isRedirectedResource(resource)).toBe(true);
         if (ur.isRedirectedResource(resource)) {
@@ -31,10 +40,10 @@ export class TestSuite {
     @Timeout(10000)
     @Test("Test a single, valid, governed content")
     async testSingleValidGovernedContent(): Promise<void> {
-        const resource = await ur.acquireResource({ uri: "https://t.co/ELrZmo81wI", transformer: this.resourceTrPipe });
+        const resource = await ur.acquireResource({ uri: "https://t.co/ELrZmo81wI", transformer: this.resourceTrPipeStd });
         Expect(resource).toBeDefined();
-        Expect(ur.isGovernedContent(resource)).toBe(true);
-        if (ur.isGovernedContent(resource)) {
+        Expect(qc.isGovernedContent(resource)).toBe(true);
+        if (qc.isGovernedContent(resource)) {
             Expect(resource.contentType).toBe("text/html; charset=utf-8");
             Expect(resource.mimeType.essence).toBe("text/html");
         }
@@ -43,14 +52,14 @@ export class TestSuite {
     @Timeout(10000)
     @Test("Test a ld+json schemas")
     async testLdJsonSchemas(): Promise<void> {
-        const tr = p.pipe(new ur.FollowRedirectsGranular(), ur.EnrichCuratableContent.standard);
-        const resource = await ur.acquireResource({ uri: "https://nystudio107.com/blog/annotated-json-ld-structured-data-examples", transformer: this.resourceTrPipe });
+        const tr = p.pipe(new ur.FollowRedirectsGranular(), ur.EnrichCuratableContent.singleton);
+        const resource = await ur.acquireResource({ uri: "https://nystudio107.com/blog/annotated-json-ld-structured-data-examples", transformer: this.resourceTrPipeStd });
         Expect(resource).toBeDefined();
         Expect(ur.isCuratableContentResource(resource)).toBe(true);
         if (ur.isCuratableContentResource(resource)) {
             const cc = resource.curatableContent;
-            Expect(ur.isQueryableHtmlContent(cc)).toBe(true);
-            if (ur.isQueryableHtmlContent(cc)) {
+            Expect(qc.isQueryableHtmlContent(cc)).toBe(true);
+            if (qc.isQueryableHtmlContent(cc)) {
                 const schemas = cc.uptypedSchemas(true);
                 Expect(schemas).toBeDefined();
                 Expect(schemas?.length).toBe(4);
@@ -68,7 +77,7 @@ export class TestSuite {
     @Timeout(10000)
     @Test("Test a single, valid, UniformResourceContent with OpenGraph")
     async testSingleValidResourceOpenGraph(): Promise<void> {
-        const resource = await ur.acquireResource({ uri: "https://t.co/ELrZmo81wI", transformer: this.resourceTrPipe });
+        const resource = await ur.acquireResource({ uri: "https://t.co/ELrZmo81wI", transformer: this.resourceTrPipeStd });
         Expect(resource).toBeDefined();
         Expect(ur.isCuratableContentResource(resource)).toBe(true);
         if (ur.isCuratableContentResource(resource)) {
@@ -86,7 +95,7 @@ export class TestSuite {
     @Timeout(10000)
     @Test("Test a single, valid, UniformResourceContent for Twitter title")
     async testSingleValidResourceTwitter(): Promise<void> {
-        const resource = await ur.acquireResource({ uri: "https://www.impactbnd.com/blog/best-seo-news-sites", transformer: this.resourceTrPipe });
+        const resource = await ur.acquireResource({ uri: "https://www.impactbnd.com/blog/best-seo-news-sites", transformer: this.resourceTrPipeStd });
         Expect(resource).toBeDefined();
         Expect(ur.isCuratableContentResource(resource)).toBe(true);
         if (ur.isCuratableContentResource(resource)) {
@@ -102,12 +111,12 @@ export class TestSuite {
     @Timeout(10000)
     @Test("Test a single, valid, UniformResourceContent for simple HTML page meta data")
     async testSimplePageMetaData(): Promise<void> {
-        const resource = await ur.acquireResource({ uri: "https://www.foxnews.com/lifestyle/photo-of-donald-trump-look-alike-in-spain-goes-viral", transformer: this.resourceTrPipe });
+        const resource = await ur.acquireResource({ uri: "https://www.foxnews.com/lifestyle/photo-of-donald-trump-look-alike-in-spain-goes-viral", transformer: this.resourceTrPipeStd });
         Expect(resource).toBeDefined();
         Expect(ur.isCuratableContentResource(resource)).toBe(true);
         if (ur.isCuratableContentResource(resource)) {
-            Expect(ur.isQueryableHtmlContent(resource.curatableContent)).toBe(true);
-            if (ur.isQueryableHtmlContent(resource.curatableContent)) {
+            Expect(qc.isQueryableHtmlContent(resource.curatableContent)).toBe(true);
+            if (qc.isQueryableHtmlContent(resource.curatableContent)) {
                 Expect(resource.curatableContent.meta()).toBeDefined();
             }
         }
@@ -128,24 +137,22 @@ export class TestSuite {
     @Timeout(10000)
     @Test("Test a single, valid, readable content resource")
     async testSingleValidReadableContent(): Promise<void> {
-        const resource = await ur.acquireResource({ uri: "https://t.co/ELrZmo81wI", transformer: this.resourceTrPipe });
+        const resource = await ur.acquireResource({ uri: "https://t.co/ELrZmo81wI", transformer: this.resourceTrPipeStd });
         Expect(resource).toBeDefined();
-        Expect(ur.isCuratableContentResource(resource)).toBe(true);
-        if (ur.isCuratableContentResource(resource)) {
-            const content = resource.curatableContent;
-            if (ur.isMercuryReadableContent(content)) {
-                Expect(await content.mercuryReadable()).toBeDefined();
-            }
-            if (ur.isMozillaReadabilityContent(content)) {
-                Expect(content.mozillaReadability()).toBeDefined();
-            }
+        Expect(ur.isMercuryReadableContent(resource));
+        if (ur.isMercuryReadableContent(resource)) {
+            Expect(await resource.mercuryReadable()).toBeDefined();
+        }
+        Expect(ur.isMozillaReadabilityContent(resource));
+        if (ur.isMozillaReadabilityContent(resource)) {
+            Expect(resource.mozillaReadability()).toBeDefined();
         }
     }
 
     @Timeout(10000)
     @Test("Test a single, invalid (HTTP status 404) resource")
     async testSingleInvalidUniformResource(): Promise<void> {
-        const resource = await ur.acquireResource({ uri: "https://t.co/fDxPF", transformer: this.resourceTrPipe });
+        const resource = await ur.acquireResource({ uri: "https://t.co/fDxPF", transformer: this.resourceTrPipeStd });
         Expect(resource).toBeDefined();
         Expect(ur.isFollowedResource(resource)).toBe(true);
         if (ur.isFollowedResource(resource)) {
@@ -160,7 +167,7 @@ export class TestSuite {
     @Timeout(10000)
     @Test("Test a single, badly formed URL")
     async testSingleInvalidURL(): Promise<void> {
-        const resource = await ur.acquireResource({ uri: "https://t", transformer: this.resourceTrPipe });
+        const resource = await ur.acquireResource({ uri: "https://t", transformer: this.resourceTrPipeStd });
         Expect(resource).toBeDefined();
         Expect(ur.isInvalidResource(resource)).toBe(true);
         if (ur.isInvalidResource(resource)) {
@@ -188,7 +195,7 @@ export class TestSuite {
         const trPipe = p.pipe(
             new ur.FollowRedirectsGranular(),
             ur.EnrichGovernedContent.singleton,
-            ur.EnrichCuratableContent.standard,
+            ur.EnrichCuratableContent.singleton,
             ur.FavIconResource.followAndDownload);
 
         const resource = await ur.acquireResource({ uri: "https://t.co/ELrZmo81wI", transformer: trPipe });

@@ -1,6 +1,6 @@
 {
     "name": "@shah/uniform-resource",
-    "version": "0.9.5",
+    "version": "1.0.0",
     "description": "Uniform resource suppliers and consumers for content orchestration engines",
     "main": "dist/uniform-resource.js",
     "types": "dist/uniform-resource.d.ts",
@@ -26,12 +26,12 @@
     "author": "Shahid N. Shah",
     "license": "MIT",
     "dependencies": {
+        "@shah/queryable-content": "0.5.0",
         "@mozilla/readability": "^0.3.0",
         "@postlight/mercury-parser": "^2.2.0",
         "@shah/traverse-urls": "0.6.0",
         "@shah/ts-cache": "0.0.2",
         "@shah/ts-pipe": "0.1.1",
-        "cheerio": "^1.0.0-rc.3",
         "content-disposition": "^0.5.3",
         "file-type": "^14.7.1",
         "jsdom": "^16.4.0",
@@ -51,7 +51,6 @@
         "metascraper-url": "^5.14.4",
         "metascraper-video": "^5.14.4",
         "metascraper-youtube": "^5.14.4",
-        "schema-dts": "^0.6.0",
         "uuid": "^8.3.0",
         "whatwg-mimetype": "^2.3.0"
     },
@@ -60,7 +59,6 @@
     },
     "homepage": "https://github.com/shah/uniform-resource",
     "devDependencies": {
-        "@types/cheerio": "^0.22.21",
         "@types/content-disposition": "^0.5.3",
         "@types/file-type": "^10.9.1",
         "@types/jsdom": "^16.2.3",
