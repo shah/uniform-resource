@@ -42,10 +42,13 @@ export class TestSuite {
     async testSingleValidGovernedContent(): Promise<void> {
         const resource = await ur.acquireResource({ uri: "https://t.co/ELrZmo81wI", transformer: this.resourceTrPipeStd });
         Expect(resource).toBeDefined();
-        Expect(qc.isGovernedContent(resource)).toBe(true);
-        if (qc.isGovernedContent(resource)) {
-            Expect(resource.contentType).toBe("text/html; charset=utf-8");
-            Expect(resource.mimeType.essence).toBe("text/html");
+        Expect(ur.isCuratableContentResource(resource)).toBe(true);
+        if (ur.isCuratableContentResource(resource)) {
+            const cc = resource.curatableContent;
+            if (qc.isGovernedContent(cc)) {
+                Expect(cc.contentType).toBe("text/html; charset=utf-8");
+                Expect(cc.mimeType.essence).toBe("text/html");
+            }
         }
     }
 
@@ -119,18 +122,6 @@ export class TestSuite {
             if (qc.isQueryableHtmlContent(resource.curatableContent)) {
                 Expect(resource.curatableContent.meta()).toBeDefined();
             }
-        }
-    }
-
-    @Timeout(45000)
-    @Test("Test a single, valid, UniformResourceContent for Metascraper meta data")
-    async testMetascraperResults(): Promise<void> {
-        const tr = p.pipe(new ur.FollowRedirectsGranular(), ur.EnrichMetascraperResults.commonRules);
-        const resource = await ur.acquireResource({ uri: "https://www.foxnews.com/lifestyle/photo-of-donald-trump-look-alike-in-spain-goes-viral", transformer: tr });
-        Expect(resource).toBeDefined();
-        Expect(ur.isMetascraperResultsSupplier(resource)).toBe(true);
-        if (ur.isMetascraperResultsSupplier(resource)) {
-            Expect(resource.metascraperResults).toBeDefined();
         }
     }
 
