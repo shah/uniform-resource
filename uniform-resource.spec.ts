@@ -1,7 +1,7 @@
 import * as qc from "@shah/queryable-content";
 import * as tru from "@shah/traverse-urls";
 import * as p from "@shah/ts-pipe";
-import { Expect, Test, TestFixture, Timeout } from "alsatian";
+import { Expect, Test, TestFixture, Timeout, TestCase } from "alsatian";
 import { Article, Organization } from "schema-dts";
 import * as ur from "./uniform-resource";
 
@@ -53,10 +53,12 @@ export class TestSuite {
     }
 
     @Timeout(10000)
+    @TestCase("https://nystudio107.com/blog/annotated-json-ld-structured-data-examples", 4, { 0: "Article", 1: "Organization" })
+    @TestCase("https://medicaleventsguide.com/manhattan-primary-care-midtown-manhattan", 6, { 0: "Organization" })
     @Test("Test a ld+json schemas")
-    async testLdJsonSchemas(): Promise<void> {
+    async testLdJsonSchemas(testURI: string, schemasCount: number, schemaTypes?: { index: number; sType: string }): Promise<void> {
         const tr = p.pipe(new ur.FollowRedirectsGranular(), ur.EnrichCuratableContent.singleton);
-        const resource = await ur.acquireResource({ uri: "https://nystudio107.com/blog/annotated-json-ld-structured-data-examples", transformer: this.resourceTrPipeStd });
+        const resource = await ur.acquireResource({ uri: testURI, transformer: this.resourceTrPipeStd });
         Expect(resource).toBeDefined();
         Expect(ur.isCuratableContentResource(resource)).toBe(true);
         if (ur.isCuratableContentResource(resource)) {
@@ -65,13 +67,14 @@ export class TestSuite {
             if (qc.isQueryableHtmlContent(cc)) {
                 const schemas = cc.uptypedSchemas(true);
                 Expect(schemas).toBeDefined();
-                Expect(schemas?.length).toBe(4);
-                if (schemas && schemas[0]) {
-                    // create a type-safe version of article
-                    Expect(schemas[0]["@type"]).toBe("Article");
-                    const article = schemas[0] as Article;
-                    const org = schemas[1] as Organization;
-                    //console.dir(article);
+                Expect(schemas?.length).toBe(schemasCount);
+                if (schemas && schemaTypes) {
+                    Object.entries(schemaTypes).forEach((entry) => {
+                        const index = parseInt(entry[0]);
+                        if (schemas[index]["@type"] != entry[1]) {
+                            console.error(`${testURI} schema ${index} @type is not "${entry[1]}"`);
+                        }
+                    })
                 }
             }
         }

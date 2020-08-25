@@ -1,6 +1,6 @@
 {
     "name": "@shah/uniform-resource",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "description": "Uniform resource suppliers and consumers for content orchestration engines",
     "main": "dist/uniform-resource.js",
     "types": "dist/uniform-resource.d.ts",
@@ -26,7 +26,7 @@
     "author": "Shahid N. Shah",
     "license": "MIT",
     "dependencies": {
-        "@shah/queryable-content": "0.5.0",
+        "@shah/queryable-content": "0.5.1",
         "@mozilla/readability": "^0.3.0",
         "@postlight/mercury-parser": "^2.2.0",
         "@shah/traverse-urls": "0.6.0",
