@@ -65,7 +65,7 @@ export class TestSuite {
             const cc = resource.curatableContent;
             Expect(qc.isQueryableHtmlContent(cc)).toBe(true);
             if (qc.isQueryableHtmlContent(cc)) {
-                const schemas = cc.uptypedSchemas(true);
+                const schemas = cc.untypedSchemas(true);
                 Expect(schemas).toBeDefined();
                 Expect(schemas?.length).toBe(schemasCount);
                 if (schemas && schemaTypes) {
