@@ -1,6 +1,6 @@
 {
     "name": "@shah/uniform-resource",
-    "version": "1.0.3",
+    "version": "1.0.4",
     "description": "Uniform resource suppliers and consumers for content orchestration engines",
     "main": "dist/uniform-resource.js",
     "types": "dist/uniform-resource.d.ts",
@@ -29,8 +29,7 @@
         "@shah/queryable-content": "0.5.2",
         "@mozilla/readability": "^0.3.0",
         "@postlight/mercury-parser": "^2.2.0",
-        "@shah/traverse-urls": "0.6.0",
-        "@shah/ts-cache": "0.0.2",
+        "@shah/traverse-urls": "0.8.0",
         "@shah/ts-pipe": "0.1.1",
         "content-disposition": "^0.5.3",
         "file-type": "^14.7.1",
