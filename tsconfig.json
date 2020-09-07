@@ -16,6 +16,8 @@
         "strict": true,
         "alwaysStrict": true,
         "noImplicitAny": true,
+        "noUnusedLocals": true,
+        "noUnusedParameters": true,
         "forceConsistentCasingInFileNames": true,
         "module": "umd",
         "moduleResolution": "node",
@@ -24,13 +26,13 @@
         "noEmit": false,
         "jsx": "preserve",
         "typeRoots": [
-            "./node_modules/@types",
+            "./node_modules/@types"
         ],
         "emitDecoratorMetadata": true,
-        "experimentalDecorators": true,
+        "experimentalDecorators": true
     },
     "include": [
-        "**/*.ts",
+        "**/*.ts"
     ],
     "exclude": [
         "**/node_modules",

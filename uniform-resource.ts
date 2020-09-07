@@ -86,7 +86,7 @@ export interface UniformResourceTransformer extends p.PipeUnion<ResourceTransfor
 export class RemoveLabelLineBreaksAndTrimSpaces implements UniformResourceTransformer {
   static readonly singleton = new RemoveLabelLineBreaksAndTrimSpaces();
 
-  async flow(ctx: ResourceTransformerContext, resource: UniformResource): Promise<UniformResource | TransformedResource> {
+  async flow(_: ResourceTransformerContext, resource: UniformResource): Promise<UniformResource | TransformedResource> {
     if (!resource.label) {
       return resource;
     }
@@ -108,7 +108,7 @@ export class RemoveLabelLineBreaksAndTrimSpaces implements UniformResourceTransf
 export class RemoveTrackingCodesFromUrl implements UniformResourceTransformer {
   static readonly singleton = new RemoveTrackingCodesFromUrl();
 
-  async flow(ctx: ResourceTransformerContext, resource: UniformResource): Promise<UniformResource | TransformedResource> {
+  async flow(_: ResourceTransformerContext, resource: UniformResource): Promise<UniformResource | TransformedResource> {
     const cleanedURI = resource.uri.replace(/(?<=&|\?)utm_.*?(&|$)/igm, "");
     if (cleanedURI != resource.uri) {
       const transformed: TransformedResource = {
@@ -209,7 +209,7 @@ export function isMercuryReadableContent(o: any): o is MercuryReadableContent {
 export class EnrichMercuryReadableContent implements UniformResourceTransformer {
   static readonly singleton = new EnrichMercuryReadableContent();
 
-  async flow(ctx: ResourceTransformerContext, resource: UniformResource): Promise<MercuryReadableContent> {
+  async flow(_: ResourceTransformerContext, resource: UniformResource): Promise<MercuryReadableContent> {
     if (isFollowedResource(resource)) {
       const tr = resource.terminalResult;
       if (tru.isTerminalTextContentResult(tr)) {
@@ -248,7 +248,7 @@ export function isMozillaReadabilityContent(o: any): o is MozillaReadabilityCont
 export class EnrichMozillaReadabilityContent implements UniformResourceTransformer {
   static readonly singleton = new EnrichMozillaReadabilityContent();
 
-  async flow(ctx: ResourceTransformerContext, resource: UniformResource): Promise<MozillaReadabilityContent> {
+  async flow(_: ResourceTransformerContext, resource: UniformResource): Promise<MozillaReadabilityContent> {
     if (isFollowedResource(resource)) {
       const tr = resource.terminalResult;
       if (tru.isTerminalTextContentResult(tr)) {
@@ -362,11 +362,11 @@ export class TypicalDownloader implements Downloader, TypicalDownloaderOptions {
     }
   }
 
-  writer(dc: DownloadContent, resource: FollowedResource): Writable {
+  writer(): Writable {
     return fs.createWriteStream(path.join(this.destPath, uuidv4()));
   }
 
-  async finalize(dc: DownloadContent, resource: FollowedResource, writer: Writable): Promise<DownloadSuccessResult | DownloadFileResult | DownloadIndeterminateFileResult> {
+  async finalize(_: DownloadContent, resource: FollowedResource, writer: Writable): Promise<DownloadSuccessResult | DownloadFileResult | DownloadIndeterminateFileResult> {
     const dfs = writer as fs.WriteStream;
     const downloadDestPath = dfs.path as string;
     let sizeExpected = -1;
@@ -422,7 +422,7 @@ export class DownloadContent implements UniformResourceTransformer {
   constructor(readonly downloader: Downloader) {
   }
 
-  async flow(ctx: ResourceTransformerContext, resource: UniformResource): Promise<UniformResource | (UniformResource & (DownloadSkipResult | DownloadErrorResult | DownloadSuccessResult))> {
+  async flow(_: ResourceTransformerContext, resource: UniformResource): Promise<UniformResource | (UniformResource & (DownloadSkipResult | DownloadErrorResult | DownloadSuccessResult))> {
     if (isFollowedResource(resource)) {
       if (tru.isTerminalResult(resource.terminalResult)) {
         try {
@@ -477,7 +477,7 @@ export class DownloadHttpContentTypes implements UniformResourceTransformer {
 export class EnrichGovernedContent implements UniformResourceTransformer {
   static readonly singleton = new EnrichGovernedContent();
 
-  async flow(ctx: ResourceTransformerContext, resource: UniformResource): Promise<UniformResource | (UniformResource & qc.GovernedContent)> {
+  async flow(_: ResourceTransformerContext, resource: UniformResource): Promise<UniformResource | (UniformResource & qc.GovernedContent)> {
     let result: UniformResource | (UniformResource & qc.GovernedContent) = resource;
     if (isFollowedResource(resource) && tru.isTerminalTextContentResult(resource.terminalResult)) {
       const textResult = resource.terminalResult;
@@ -507,7 +507,7 @@ export class FavIconResource implements UniformResourceTransformer {
 
   }
 
-  async flow(ctx: ResourceTransformerContext, resource: UniformResource): Promise<UniformResource | (UniformResource & FavIconSupplier)> {
+  async flow(_: ResourceTransformerContext, resource: UniformResource): Promise<UniformResource | (UniformResource & FavIconSupplier)> {
     const favIconURL = new URL(resource.uri);
     favIconURL.pathname = '/favicon.ico';
     const fir = await acquireResource({
@@ -539,7 +539,7 @@ export class EnrichCuratableContent implements UniformResourceTransformer {
   constructor(readonly contentTr: qc.ContentTransformer) {
   }
 
-  async flow(ctx: ResourceTransformerContext, resource: UniformResource): Promise<UniformResource | CuratableContentResource> {
+  async flow(_: ResourceTransformerContext, resource: UniformResource): Promise<UniformResource | CuratableContentResource> {
     let result: UniformResource | CuratableContentResource = resource;
     if (isFollowedResource(resource) && tru.isTerminalTextContentResult(resource.terminalResult)) {
       const textResult = resource.terminalResult;

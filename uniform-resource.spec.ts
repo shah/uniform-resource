@@ -1,8 +1,7 @@
 import * as qc from "@shah/queryable-content";
 import * as tru from "@shah/traverse-urls";
 import * as p from "@shah/ts-pipe";
-import { Expect, Test, TestFixture, Timeout, TestCase } from "alsatian";
-import { Article, Organization } from "schema-dts";
+import { Expect, Test, TestCase, TestFixture, Timeout } from "alsatian";
 import * as ur from "./uniform-resource";
 
 @TestFixture("Uniform Resource Test Suite")
@@ -58,7 +57,7 @@ export class TestSuite {
     @Test("Test a ld+json schemas")
     async testLdJsonSchemas(testURI: string, schemasCount: number, schemaTypes?: { index: number; sType: string }): Promise<void> {
         const tr = p.pipe(new ur.FollowRedirectsGranular(), ur.EnrichCuratableContent.singleton);
-        const resource = await ur.acquireResource({ uri: testURI, transformer: this.resourceTrPipeStd });
+        const resource = await ur.acquireResource({ uri: testURI, transformer: tr });
         Expect(resource).toBeDefined();
         Expect(ur.isCuratableContentResource(resource)).toBe(true);
         if (ur.isCuratableContentResource(resource)) {
